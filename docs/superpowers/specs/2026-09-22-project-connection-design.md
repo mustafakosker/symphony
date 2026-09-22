@@ -2,7 +2,7 @@
 
 ## Status and intent
 
-The user approved automatic project matching and the target/reference distinction on 2026-09-22, then specified a dedicated read-only projects root configured in global settings. This revision replaces the earlier individual-folder/clone connection flow and single-project-per-task restriction. Written-spec review and implementation planning remain pending.
+The user approved automatic project matching and the target/reference distinction on 2026-09-22, then specified a dedicated read-only projects root configured in global settings. This revision replaces the earlier individual-folder/clone connection flow and single-project-per-task restriction. The user approved this written specification on 2026-09-22. The implementation plan is prepared for review; execution-method selection and implementation remain pending.
 
 Symphony investigates repositories to produce grounded findings, designs, and implementation plans. A leading `[project-name]` in the task title identifies where changes are intended in a later implementation phase. Project names mentioned elsewhere select reference repositories. Without a title prefix, matched projects are references only; the system does not infer a change target. All repositories remain read-only in this phase, including the future change target.
 
@@ -210,4 +210,4 @@ Before claiming the real read-only path works, run genuine host capability probe
 
 ## Review handoff
 
-The next step is user review of this revised written specification, especially the global root, direct-child discovery, external copy maintenance, automatic matching, and target/reference context binding. After approval, use the writing-plans skill to create a concrete implementation plan, including supported-host capability verification and integration with the existing workspace UI. Implementation begins only after that plan has been reviewed and its execution method selected.
+The written specification is approved. Review the [implementation plan](../plans/2026-09-22-project-discovery.md), including supported-host capability verification and integration with the existing workspace UI. Implementation begins only after that plan has been reviewed and its execution method selected.
