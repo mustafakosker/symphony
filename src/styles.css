@@ -2145,22 +2145,33 @@ textarea:not([data-slot])::placeholder {
   padding: 0;
   margin: 8px 0;
 }
-.review-artifacts li {
+.review-artifacts li,
+.task-artifacts li {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   padding: 6px 0;
   overflow-wrap: anywhere;
+  min-width: 0;
 }
 .review-artifacts a,
 .task-artifacts a {
   color: var(--primary);
 }
-.review-artifacts span {
+.artifact-digest {
   color: var(--text-muted);
   font-family: ui-monospace, monospace;
   font-size: 10px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.artifact-digest summary {
+  cursor: pointer;
+}
+.artifact-digest code {
+  display: block;
+  max-width: 100%;
   overflow-wrap: anywhere;
 }
 .review-label {
@@ -2187,6 +2198,9 @@ textarea:not([data-slot])::placeholder {
 }
 .artifact-preview {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 6px 0;
   padding: 10px;
   background: #141820;

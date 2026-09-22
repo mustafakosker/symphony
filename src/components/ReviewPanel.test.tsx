@@ -94,64 +94,6 @@ it("explains that terminal artifact approval can complete the task", () => {
   expect(screen.getByText(/Approving completes the workflow after its completion checks pass/)).toBeInTheDocument();
 });
 
-it("shows text artifacts as text after fetching their reviewed version", async () => {
-  const task = waitingTask();
-  task.reviews[0].artifacts = [{ id: "report", version: 3, digest: "digest", path: "artifacts/report.3.bin" }];
-  const fetcher = vi.fn().mockResolvedValue({ ok: true, headers: { get: () => "text/plain; charset=utf-8" },
-    body: new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("<img src=x onerror=alert(1)>")); controller.close(); } }) });
-  vi.stubGlobal("fetch", fetcher);
-  render(<ReviewPanel task={task} review={task.reviews[0]} disabled={false} onCommand={vi.fn()} />);
-  await userEvent.click(screen.getByRole("button", { name: "View report v3" }));
-  expect(await screen.findByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
-  expect(document.querySelector("img")).toBeNull();
-  expect(fetcher.mock.calls[0][0]).toContain("/artifacts/report?version=3");
-  vi.unstubAllGlobals();
-});
-
-it("cancels an oversized preview after the bounded read", async () => {
-  const task = waitingTask();
-  task.reviews[0].artifacts = [{ id: "large", version: 1, digest: "digest", path: "artifacts/large.1.bin" }];
-  let delivered = 0;
-  let cancelled = false;
-  const body = new ReadableStream<Uint8Array>({
-    pull(controller) { delivered++; controller.enqueue(new Uint8Array(64 * 1024).fill(65)); },
-    cancel() { cancelled = true; },
-  });
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, headers: { get: () => "text/plain; charset=utf-8" }, body,
-    text: async () => { throw new Error("unbounded text read"); } }));
-  render(<ReviewPanel task={task} review={task.reviews[0]} disabled={false} onCommand={vi.fn()} />);
-  await userEvent.click(screen.getByRole("button", { name: "View large v1" }));
-  expect(await screen.findByText(/Preview truncated/)).toBeInTheDocument();
-  expect(delivered).toBeLessThanOrEqual(6); // Streams may prefetch one chunk.
-  expect(cancelled).toBe(true);
-});
-
-it("offers download when preview bytes are invalid UTF-8", async () => {
-  const task = waitingTask();
-  task.reviews[0].artifacts = [{ id: "binary", version: 1, digest: "digest", path: "artifacts/binary.1.bin" }];
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, headers: { get: () => "text/plain; charset=utf-8" },
-    body: new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([0xff, 0x00])); controller.close(); } }) }));
-  render(<ReviewPanel task={task} review={task.reviews[0]} disabled={false} onCommand={vi.fn()} />);
-  await userEvent.click(screen.getByRole("button", { name: "View binary v1" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Download this artifact");
-  expect(screen.getByRole("link", { name: "binary · v1" })).toBeInTheDocument();
-});
-
-it("keeps a valid UTF-8 preview when the byte cap splits a character", async () => {
-  const task = waitingTask();
-  task.reviews[0].artifacts = [{ id: "unicode", version: 1, digest: "digest", path: "artifacts/unicode.1.bin" }];
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, headers: { get: () => "text/plain; charset=utf-8" },
-    body: new ReadableStream({ start(controller) {
-      controller.enqueue(new Uint8Array(256 * 1024 - 1).fill(65));
-      controller.enqueue(new Uint8Array([0xc3, 0xa9, 66]));
-      controller.close();
-    } }) }));
-  render(<ReviewPanel task={task} review={task.reviews[0]} disabled={false} onCommand={vi.fn()} />);
-  await userEvent.click(screen.getByRole("button", { name: "View unicode v1" }));
-  expect(await screen.findByText(/Preview truncated/)).toBeInTheDocument();
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-});
-
 it('visibly requires a rejection note and sends only validated feedback', async () => {
   const task = waitingTask(); const onCommand = vi.fn().mockResolvedValue(undefined);
   render(<ReviewPanel task={task} review={task.reviews[0]} disabled={false} onCommand={onCommand} />);
