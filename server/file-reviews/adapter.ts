@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { BoundaryError } from '../../shared/validate.js';
 import type { Command, Issue, Task } from '../../shared/contracts.js';
 import type { Store } from '../store/task-store.js';
-import { makeRequest, renderDraft } from './document.js';
-import { selectReview, type RequestRecord } from './model.js';
+import { makeRequest, parseResponse, renderDraft, renderReceipt } from './document.js';
+import { matchesBinding, selectReview, type RequestRecord } from './model.js';
 import { loadRecords, publishExclusive, readBounded, saveRecord, verifyMaterial } from './io.js';
 
 export type FileReviewAdapter = { scan(nowMs: number): Promise<void>; issues(): Promise<Issue[]> };
@@ -15,6 +16,83 @@ function issue(key: string, category: string, message: string, taskId: string | 
 function same(a: Uint8Array, b: Uint8Array): boolean { return Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0; }
 export function createFileReviews(options: FileReviewOptions): FileReviewAdapter {
   let queue = Promise.resolve(); let currentIssues: Issue[] = [];
+  const observations = new Map<string, { sha256: string; firstSeenMs: number }>();
+  async function settle(record: RequestRecord, status: 'Accepted' | 'Outdated' | 'Needs correction', message: string,
+    acceptedRevision: number | null = null): Promise<RequestRecord> {
+    const next: RequestRecord = { ...record, phase: 'settled', outcome: { status, message, acceptedRevision } };
+    await saveRecord(options.localRoot, next);
+    return next;
+  }
+  async function submission(record: RequestRecord, nowMs: number): Promise<void> {
+    const ready = `reviews/${record.basename}.ready.md`;
+    if (record.phase === 'issued') {
+      let bytes: Buffer | null;
+      try { bytes = await readBounded(options.workspaceRoot, ready); }
+      catch (error) { observations.delete(record.token); throw error; }
+      if (!bytes) { observations.delete(record.token); return; }
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      const prior = observations.get(record.token);
+      if (!prior || prior.sha256 !== sha256 || nowMs < prior.firstSeenMs) {
+        observations.set(record.token, { sha256, firstSeenMs: nowMs }); return;
+      }
+      if (nowMs - prior.firstSeenMs < options.stableMs) return;
+      observations.delete(record.token);
+      record = { ...record, phase: 'captured', snapshot: { base64: bytes.toString('base64'), sha256 } };
+      await saveRecord(options.localRoot, record);
+    }
+    if (record.phase === 'captured') {
+      let command: Command;
+      try { command = parseResponse(record, Buffer.from(record.snapshot!.base64, 'base64')); }
+      catch (error) { record = await settle(record, 'Needs correction', (error as Error).message); command = undefined as never; }
+      if (record.phase === 'captured') {
+        let task: Task;
+        try { task = await options.store.get(record.binding.taskId); }
+        catch (error) {
+          if (!(error instanceof BoundaryError) || error.code !== 'missing') throw error;
+          record = await settle(record, 'Outdated', 'The task no longer exists'); task = undefined as never;
+        }
+        if (record.phase === 'captured' && !matchesBinding(task!, record.binding))
+          record = await settle(record, 'Outdated', 'The reviewed task or work has changed');
+        if (record.phase === 'captured' && command!.action.kind === 'approve') {
+          for (const material of record.materials) {
+            if (!await verifyMaterial(options.workspaceRoot, `reviews/${material.filename}`, material.ref.digest)) {
+              record = await settle(record, 'Needs correction', 'Reviewed artifact material is missing or changed'); break;
+            }
+          }
+        }
+        if (record.phase === 'captured') {
+          record = { ...record, phase: 'applying', command: command! };
+          await saveRecord(options.localRoot, record);
+        }
+      }
+    }
+    if (record.phase === 'applying') {
+      try {
+        const accepted = await options.apply(record.command!);
+        record = await settle(record, 'Accepted', 'Review response accepted', accepted.revision);
+      } catch (error) {
+        if (error instanceof BoundaryError && error.code === 'conflict')
+          record = await settle(record, 'Outdated', error.message);
+        else if (error instanceof BoundaryError && error.code === 'invalid') {
+          // Invalid is safe to settle only when a current revision proves no command was committed.
+          const current = await options.store.get(record.binding.taskId);
+          if (current.revision === record.binding.taskRevision)
+            record = await settle(record, 'Needs correction', error.message);
+          else throw error;
+        } else throw error;
+      }
+    }
+    if (record.phase === 'settled' && !record.receiptPublished) {
+      const receipt = `reviews/${record.basename}.receipt.md`;
+      try { await publishExclusive(options.workspaceRoot, receipt, Buffer.from(renderReceipt(record))); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        const existing = await readBounded(options.workspaceRoot, receipt);
+        if (!existing || !same(existing, Buffer.from(renderReceipt(record)))) throw error;
+      }
+      await saveRecord(options.localRoot, { ...record, receiptPublished: true });
+    }
+  }
   async function reconcile(record: RequestRecord, issues: Issue[]): Promise<void> {
     const draft = `reviews/${record.basename}.md`;
     const ready = `reviews/${record.basename}.ready.md`;
@@ -43,7 +121,7 @@ export function createFileReviews(options: FileReviewOptions): FileReviewAdapter
     }
     await saveRecord(options.localRoot, { ...record, publication: 'published' });
   }
-  async function scan(): Promise<void> {
+  async function scan(nowMs: number): Promise<void> {
     const issues: Issue[] = [];
     const loaded = await loadRecords(options.localRoot);
     issues.push(...loaded.issues);
@@ -53,6 +131,8 @@ export function createFileReviews(options: FileReviewOptions): FileReviewAdapter
       known.add(`${record.basename}.md`); known.add(`${record.basename}.ready.md`); known.add(`${record.basename}.receipt.md`);
       try { await reconcile(record, issues); }
       catch (error) { issues.push(issue(record.token, 'publication', `Review export failed: ${(error as Error).message}`, record.binding.taskId)); }
+      try { await submission(record, nowMs); }
+      catch (error) { issues.push(issue(record.token, 'submission', `Review submission will retry: ${(error as Error).message}`, record.binding.taskId)); }
     }
     let filenames: string[] = [];
     try { filenames = await readdir(join(options.workspaceRoot, 'reviews')); }
@@ -89,6 +169,6 @@ export function createFileReviews(options: FileReviewOptions): FileReviewAdapter
     }
     currentIssues = issues;
   }
-  return { scan(_nowMs) { const result = queue.then(scan); queue = result.catch(() => undefined); return result; },
+  return { scan(nowMs) { const result = queue.then(() => scan(nowMs)); queue = result.catch(() => undefined); return result; },
     async issues() { return structuredClone(currentIssues); } };
 }
