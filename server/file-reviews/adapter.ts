@@ -6,16 +6,31 @@ import type { Command, Issue, Task } from '../../shared/contracts.js';
 import type { Store } from '../store/task-store.js';
 import { makeRequest, parseResponse, renderDraft, renderReceipt } from './document.js';
 import { matchesBinding, selectReview, type RequestRecord } from './model.js';
-import { loadRecords, publishExclusive, readBounded, saveRecord, verifyMaterial } from './io.js';
+import * as fileIo from './io.js';
+
+export type FileReviewIo = {
+  loadRecords: typeof fileIo.loadRecords;
+  publishExclusive: typeof fileIo.publishExclusive;
+  readBounded: typeof fileIo.readBounded;
+  saveRecord: typeof fileIo.saveRecord;
+  verifyMaterial: typeof fileIo.verifyMaterial;
+};
 
 export type FileReviewAdapter = { scan(nowMs: number): Promise<void>; issues(): Promise<Issue[]> };
-export type FileReviewOptions = { workspaceRoot: string; localRoot: string; stableMs: number; store: Store; apply(command: Command): Promise<Task> };
+export type FileReviewOptions = { workspaceRoot: string; localRoot: string; stableMs: number; store: Store; apply(command: Command): Promise<Task>; io?: Partial<FileReviewIo> };
 function issue(key: string, category: string, message: string, taskId: string | null = null): Issue {
   return { id: `file-review-${createHash('sha256').update(`${category}:${key}`).digest('hex').slice(0, 16)}`, taskId, message };
 }
 function same(a: Uint8Array, b: Uint8Array): boolean { return Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0; }
 export function createFileReviews(options: FileReviewOptions): FileReviewAdapter {
   let queue = Promise.resolve(); let currentIssues: Issue[] = [];
+  const { loadRecords, publishExclusive, readBounded, saveRecord, verifyMaterial } = {
+    loadRecords: options.io?.loadRecords ?? fileIo.loadRecords,
+    publishExclusive: options.io?.publishExclusive ?? fileIo.publishExclusive,
+    readBounded: options.io?.readBounded ?? fileIo.readBounded,
+    saveRecord: options.io?.saveRecord ?? fileIo.saveRecord,
+    verifyMaterial: options.io?.verifyMaterial ?? fileIo.verifyMaterial,
+  };
   const observations = new Map<string, { sha256: string; firstSeenMs: number }>();
   async function settle(record: RequestRecord, status: 'Accepted' | 'Outdated' | 'Needs correction', message: string,
     acceptedRevision: number | null = null): Promise<RequestRecord> {
@@ -127,12 +142,41 @@ export function createFileReviews(options: FileReviewOptions): FileReviewAdapter
     issues.push(...loaded.issues);
     const records = loaded.records;
     const known = new Set<string>();
+    const successors = new Map<string, RequestRecord[]>();
+    for (const record of records) if (record.predecessor) successors.set(record.predecessor, [...(successors.get(record.predecessor) ?? []), record]);
+    for (const [predecessor, entries] of successors) if (entries.length > 1) issues.push(issue(predecessor, 'duplicate-successor', 'Multiple correction records refer to one retired request'));
     for (const record of records) {
       known.add(`${record.basename}.md`); known.add(`${record.basename}.ready.md`); known.add(`${record.basename}.receipt.md`);
       try { await reconcile(record, issues); }
       catch (error) { issues.push(issue(record.token, 'publication', `Review export failed: ${(error as Error).message}`, record.binding.taskId)); }
       try { await submission(record, nowMs); }
       catch (error) { issues.push(issue(record.token, 'submission', `Review submission will retry: ${(error as Error).message}`, record.binding.taskId)); }
+      const current = (await loadRecords(options.localRoot)).records.find(item => item.token === record.token);
+      if (!current) continue;
+      if (current.phase === 'settled' && current.snapshot) {
+        try {
+          const readyBytes = await readBounded(options.workspaceRoot, `reviews/${current.basename}.ready.md`);
+          if (readyBytes && createHash('sha256').update(readyBytes).digest('hex') !== current.snapshot.sha256)
+            issues.push(issue(current.token, 'changed-ready', 'Consumed review file changed after capture; original snapshot and receipt preserved', current.binding.taskId));
+        } catch (error) { issues.push(issue(current.token, 'ready-inspection', `Cannot inspect consumed review file: ${(error as Error).message}`, current.binding.taskId)); }
+      }
+      if (current.phase === 'settled' && current.outcome?.status === 'Needs correction' && !successors.has(current.token) && !loaded.issues.length) {
+        try {
+          const task = await options.store.get(current.binding.taskId);
+          const review = selectReview(task);
+          if (!review || review.id !== current.binding.review.id || task.revision !== current.binding.taskRevision) continue;
+          const bytes = Buffer.from(current.snapshot!.base64, 'base64');
+          let response: string | undefined;
+          try {
+            const submitted = new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/\r\n/g, '\n');
+            if (submitted.startsWith(current.prefix)) response = submitted.slice(current.prefix.length);
+          } catch { /* Unsafe response text is not carried into a correction. */ }
+          const successor = makeRequest(task, review, randomUUID(), current.token, response);
+          await saveRecord(options.localRoot, successor);
+          successors.set(current.token, [successor]); records.push(successor);
+          await reconcile(successor, issues);
+        } catch (error) { issues.push(issue(current.token, 'correction', `Cannot issue correction: ${(error as Error).message}`, current.binding.taskId)); }
+      }
     }
     let filenames: string[] = [];
     try { filenames = await readdir(join(options.workspaceRoot, 'reviews')); }

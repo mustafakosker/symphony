@@ -91,7 +91,7 @@ it('does not approve when reviewed material bytes are tampered', async () => {
     expect(current.revision).toBe(1);
     expect(current.reviews[0].decision).toBeNull();
     expect(await readFile(ready.replace('.ready.md', '.receipt.md'), 'utf8')).toContain('Reviewed artifact material is missing or changed');
-    expect((await loadRecords(f.localRoot)).records[0].outcome?.status).toBe('Needs correction');
+    expect((await loadRecords(f.localRoot)).records.find(r => r.predecessor === null)?.outcome?.status).toBe('Needs correction');
   } finally { await f.dispose(); }
 });
 
