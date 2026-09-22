@@ -23,7 +23,7 @@ function workflowScope(workflow: Workflow | null): string {
 }
 
 function materialsFor(review: Review, token: string): Material[] {
-  return review.artifacts.map(ref => ({ ref: structuredClone(ref), filename: `materials/${token}/${ref.path}` }));
+  return review.artifacts.map(ref => ({ ref: structuredClone(ref), filename: `materials/${token}/${ref.id}.v${ref.version}.bin` }));
 }
 
 function prefix(task: Task, review: Review, basename: string, materials: Material[], workflow: Workflow | null): string {

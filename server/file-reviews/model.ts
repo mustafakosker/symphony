@@ -81,9 +81,7 @@ function validateBoundReview(task: Task, review: Review): void {
   if (task.reviews.slice(0, index).some(item => item.decision === null)) throw new Error('An earlier review is still pending');
   if (!equal(task.reviews[index], review)) throw new Error('Review does not match task snapshot');
   const workflow = expectedWorkflow(task, review);
-  if (review.kind === 'question') {
-    if (review.workflowVersion !== null) throw new Error('Question review must not bind a workflow version');
-  } else if (!workflow || review.workflowVersion !== workflow.version) {
+  if (review.kind !== 'question' && (!workflow || review.workflowVersion !== workflow.version)) {
     throw new Error('Review workflow snapshot is missing or stale');
   }
 }
@@ -116,7 +114,7 @@ function parseBinding(value: unknown): Binding {
   const review = parseReview(v.review, 'record.binding.review');
   if (!supported(review) || review.decision !== null) throw new Error('record.binding.review must be a supported pending review');
   const workflow = v.workflow === null ? null : parseWorkflow(v.workflow);
-  if (review.kind === 'question' ? workflow !== null || review.workflowVersion !== null :
+  if (review.kind === 'question' ? workflow !== null :
       !workflow || workflow.version !== review.workflowVersion) throw new Error('record.binding.workflow is inconsistent');
   return { taskId, taskRevision: integer(v.taskRevision, 'record.binding.taskRevision', 1), review, workflow };
 }
@@ -145,12 +143,19 @@ export function parseRecord(value: unknown): RequestRecord {
   const prefix = text(v.prefix, 'record.prefix');
   const initialResponse = text(v.initialResponse, 'record.initialResponse');
   if (!prefix.endsWith('## Your response\n')) throw new Error('record.prefix must end at the response heading');
+  const instructionHeading = prefix.lastIndexOf('## Instructions\n');
+  if (instructionHeading < 0) throw new Error('record.prefix must include instructions');
+  const instructions = prefix.slice(instructionHeading + '## Instructions\n'.length).split('\n');
+  const actionInstructions = binding.review.kind === 'question'
+    ? 'Only `action: answer` is allowed. An answer is required.'
+    : 'Allowed actions: `action: approve` or `action: reject`.';
+  if (instructions[2] !== actionInstructions) throw new Error('record instructions broaden supported actions');
   if (!Array.isArray(v.materials)) throw new Error('record.materials must be an array');
   const materials = v.materials.map((item, index) => {
     const material = requiredObject(item, `record.materials[${index}]`);
     return { ref: parseArtifact(material.ref, `record.materials[${index}].ref`), filename: text(material.filename, `record.materials[${index}].filename`) };
   });
-  const expectedMaterials = binding.review.artifacts.map(ref => ({ ref, filename: `materials/${token}/${ref.path}` }));
+  const expectedMaterials = binding.review.artifacts.map(ref => ({ ref, filename: `materials/${token}/${ref.id}.v${ref.version}.bin` }));
   if (!equal(materials, expectedMaterials)) throw new Error('record.materials do not match binding');
   const predecessor = v.predecessor === null ? null : text(v.predecessor, 'record.predecessor');
   if (predecessor !== null && !uuid.test(predecessor)) throw new Error('record.predecessor must be a UUID');
@@ -174,6 +179,8 @@ export function parseRecord(value: unknown): RequestRecord {
         !('reviewId' in command.action) || command.action.reviewId !== binding.review.id) throw new Error('record.command does not match binding');
     if (binding.review.kind === 'question' ? command.action.kind !== 'answer' : !['approve', 'reject'].includes(command.action.kind))
       throw new Error('record.command action is not supported by binding');
+    if ((command.action.kind === 'answer' || command.action.kind === 'reject') && !command.action.text.trim())
+      throw new Error('record.command response text is required');
     if (command.action.kind === 'approve' && !equal([...command.action.artifactDigests].sort(), binding.review.artifacts.map(ref => ref.digest).sort()))
       throw new Error('record.command artifact digests do not match binding');
   }
@@ -181,7 +188,7 @@ export function parseRecord(value: unknown): RequestRecord {
       (phase === 'captured' && (!snapshot || command || outcome)) ||
       (phase === 'applying' && (!snapshot || !command || outcome)) ||
       (phase === 'settled' && (!snapshot || !outcome))) throw new Error('record phase invariants are invalid');
-  if ((publication === 'published') !== v.receiptPublished || (publication === 'published' && phase !== 'settled'))
+  if (v.receiptPublished && phase !== 'settled')
     throw new Error('record receipt publication is invalid');
   return { schemaVersion: 1, token, basename, binding, prefix, initialResponse, materials, predecessor,
     phase: phase as RequestRecord['phase'], publication: publication as RequestRecord['publication'], snapshot, command, outcome,

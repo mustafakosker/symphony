@@ -110,4 +110,39 @@ describe('file review documents', () => {
     expect(parseRecord(captured)).toMatchObject({ phase: 'applying', command: captured.command });
     expect(() => parseRecord({ ...captured, command: { ...captured.command, requestId: crypto.randomUUID() } })).toThrow();
   });
+
+  it('preserves an active-workflow question binding with its workflow version', () => {
+    const task = questionTask(); task.workflow = workflowProposal(); task.reviews[0].workflowVersion = 1;
+    const record = makeRequest(task, task.reviews[0], crypto.randomUUID());
+    expect(record.binding).toMatchObject({ review: { workflowVersion: 1 }, workflow: null });
+  });
+
+  it('rejects empty stored answer and rejection commands', () => {
+    const task = questionTask(); const record = makeRequest(task, task.reviews[0], crypto.randomUUID());
+    const bytes = Buffer.from(record.prefix + 'action: answer\n\nJava 17.');
+    const applying = { ...record, phase: 'applying' as const,
+      snapshot: { base64: bytes.toString('base64'), sha256: crypto.createHash('sha256').update(bytes).digest('hex') }, command: parseResponse(record, bytes) };
+    expect(() => parseRecord({ ...applying, command: { ...applying.command, action: { kind: 'answer', reviewId: 'question-1', text: ' ' } } })).toThrow();
+    const approvalTask = waitingTask(); const approval = makeRequest(approvalTask, approvalTask.reviews[0], crypto.randomUUID());
+    const rejected = { ...approval, phase: 'applying' as const, snapshot: applying.snapshot,
+      command: { requestId: approval.token, taskId: approvalTask.id, expectedRevision: 1,
+        action: { kind: 'reject' as const, reviewId: 'workflow-review', text: '' } } };
+    expect(() => parseRecord(rejected)).toThrow();
+  });
+
+  it('keeps draft publication independent from receipt publication and fixes material names', () => {
+    const task = waitingTask(); task.workflow = workflowProposal(); task.proposedWorkflow = null;
+    task.reviews[0] = { ...task.reviews[0], kind: 'artifact', stepId: 'findings',
+      artifacts: [{ id: 'findings', version: 2, digest: 'a'.repeat(64), path: '../untrusted.md' }] };
+    const record = makeRequest(task, task.reviews[0], crypto.randomUUID());
+    expect(record.materials[0].filename).toBe(`materials/${record.token}/findings.v2.bin`);
+    expect(parseRecord({ ...record, publication: 'published' })).toMatchObject({ phase: 'issued', receiptPublished: false });
+  });
+
+  it('rejects records whose generated instructions advertise unsupported actions', () => {
+    const task = questionTask(); const record = makeRequest(task, task.reviews[0], crypto.randomUUID());
+    expect(() => parseRecord({ ...record, prefix: record.prefix.replace('Only `action: answer` is allowed.',
+      'Allowed actions: `action: answer` or `action: retry`.') })).toThrow();
+    expect(parseRecord({ ...record, initialResponse: 'action: answer\n\n' })).toMatchObject({ phase: 'issued' });
+  });
 });
