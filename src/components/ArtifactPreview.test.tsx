@@ -70,3 +70,17 @@ it("does not retain a preview from a previous artifact identity", async () => {
   await userEvent.click(screen.getByRole("button", { name: "View findings v2" }));
   expect(await screen.findByText("Second")).toBeInTheDocument();
 });
+
+it("shows a successful preview after retrying a failed fetch", async () => {
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce(new Response("Unavailable", { status: 503 }))
+    .mockResolvedValueOnce(new Response("Recovered", { headers: { "Content-Type": "text/plain" } })));
+  render(<ul><ArtifactPreview taskId="task" artifact={{ id: "report", version: 1, digest: "digest", path: "artifacts/report" }} /></ul>);
+  const viewButton = screen.getByRole("button", { name: "View report v1" });
+  await userEvent.click(viewButton);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Artifact unavailable (503)");
+  await userEvent.click(viewButton);
+  await userEvent.click(viewButton);
+  expect(await screen.findByText("Recovered")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

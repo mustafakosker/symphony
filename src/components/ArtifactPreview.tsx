@@ -17,6 +17,7 @@ function ArtifactPreviewContent({ taskId, artifact }: { taskId: string; artifact
   const url = `/api/tasks/${encodeURIComponent(taskId)}/artifacts/${encodeURIComponent(artifact.id)}?version=${artifact.version}`;
   useEffect(() => {
     if (!open || text !== null) return;
+    setError(null);
     const controller = new AbortController();
     void (async () => {
       try {
