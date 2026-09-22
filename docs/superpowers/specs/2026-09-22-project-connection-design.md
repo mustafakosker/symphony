@@ -2,9 +2,9 @@
 
 ## Status and intent
 
-The user approved the connection flow and context design in conversation on 2026-09-22, selected committed code rather than working-tree changes, and requested read-only connected repositories. This specification incorporates those decisions. Written-specification review and implementation planning remain pending; no product implementation is authorized by this document alone.
+The user approved the connection flow and context design in conversation on 2026-09-22, selected committed code rather than working-tree changes, and requested read-only connected repositories. They subsequently clarified that they keep multiple projects under a projects folder and generally select one project per task, and approved one project selector within task creation for saved projects, local folders, and cloning. This specification incorporates those decisions. Review of this revised written specification and implementation planning remain pending; no product implementation is authorized by this document alone.
 
-Symphony should turn a broad request such as “Improve onboarding” into a proposal grounded in the user's application. A user connects a repository once, maintains an editable project brief, and chooses that project for a task. Agents investigate the selected code and cite the files behind their findings.
+Symphony should turn a broad request such as “Improve onboarding” into a proposal grounded in the user's application. While creating a task, a user selects one project through a single selector: choose a saved project, select a local Git folder, or clone a repository. Symphony remembers connected projects and their editable briefs for reuse. Agents investigate the selected code and cite the files behind their findings.
 
 Success means that connecting and using a project is available through the application; the task's code and brief remain reproducible; the connected repository is read-only to agents; and the user can inspect the evidence behind a proposal.
 
@@ -23,21 +23,27 @@ The first release attaches a project when a task is created. Rebinding an existi
 
 ## User experience
 
-### Project connection
+### One project selector
 
-Add Projects and Connect project to the workspace navigation, using the approved Symphony UI design. The UI implementation is in the separate `codex/linear-ui` worktree at specification time; integrate with its sidebar, task page, and shared components when that work lands rather than introducing a second presentation system.
+New task contains one optional Project selector offering saved projects, Select local folder, and Clone repository. Each connected task selects exactly one project containing one Git repository. For a user with `projects/shop` and `projects/dashboard`, these are individual project choices; the parent `projects/` directory is a browsing location, not an aggregate project connection. There is no global active project or separate local connection step.
+
+Connection and initial preparation happen within the task-creation flow and preserve the entered title and task text. Once preparation succeeds, the new project remains selected in that same task form and is saved for later tasks. Cancelling task creation does not remove a successfully saved project. Use the existing merged workspace UI components and task dialog.
+
+A Projects page manages saved project names, defaults, briefs, and preparation status. It uses the same project records and is not a prerequisite for task creation. Do not add a separate top-level Connect project flow in this release.
+
+### Connecting from the selector
 
 1. Choose Local folder or Clone repository. The folder chooser browses directories on the coordinator's host and accepts an absolute path. It does not upload a browser-selected directory. The clone form accepts the repository URL and a display name; Symphony chooses its managed destination.
 2. Validate the Git source and list branches. Preselect the local repository's current branch when it exists, or the remote's declared default branch for a clone. Otherwise require a selection; do not guess `main` or silently choose another branch. Detached local HEAD is acceptable when another named branch can be selected; an empty repository has no usable committed context.
-3. Save the connection and check agent access. The project page distinguishes Connected from Agent access ready. A usable Git URL/path is not evidence that the agent's execution profile has been verified.
+3. Save the connection and check agent access. The selector's setup view distinguishes Connected from Agent access ready and shows durable operation progress. A usable Git URL/path is not evidence that the agent's execution profile has been verified.
 4. When read-only agent access is ready, generate the first brief from the selected branch's exact commit. Show progress, the source commit, and an editable result. The first successfully generated brief becomes the current version without introducing an extra approval checkpoint. Its generated provenance remains visible.
-5. The project becomes selectable for a task after it has verified read-only access and a saved brief. A user can write a brief manually if generation fails; that does not bypass the access requirement.
+5. The selected project becomes usable for task submission after it has verified read-only access and a saved brief. Unready saved projects remain visible with their status; selecting one opens its setup/retry view. A user can write a brief manually if generation fails; that does not bypass the access requirement. A connected task cannot be submitted while its project is unready; the user may explicitly clear the selection to submit a projectless task.
 
 The user can rename a project, choose its default branch, edit the brief, refresh available branches, and retry failed preparation. Source identity is fixed: connecting a different folder or remote creates a different connection. Removal and automatic repository cleanup are outside this slice, so saved task evidence is retained.
 
 ### Task creation and task page
 
-New task adds an optional Project selector and, when selected, a Branch selector. Projectless submission remains available. The selected branch and brief version are part of the submission, not instructions embedded into the idea text.
+The single Project selector described above is followed by a Branch selector once the source has been validated. Choosing a saved project preselects its default branch; connecting a source uses the branch-selection rules above. Projectless submission remains available. The selected branch and brief version are part of the submission, not instructions embedded into the idea text.
 
 On the first accepted submission, the server resolves the selected branch once and durably journals that commit and the exact brief version selected in the form before starting snapshot preparation. It imports the committed snapshot and completes the context record before intake can dispatch triage. A newer library brief does not silently replace the selected version. A retried request uses the already bound commit and brief even if the branch or library changes. Reusing a request ID for different input is a conflict.
 
@@ -153,6 +159,7 @@ Implementation tests must demonstrate behavior, including:
 - Local source files, index, branch, and Git metadata remain unchanged through connection, refresh, brief generation, and task investigation. Dirty/staged/untracked local content never enters the snapshot.
 - A moving branch resolves once per submission; retries, subsequent steps, and restarts use the original commit and brief. Reused request IDs cannot change the selection.
 - Connected-task triage cannot overwrite the project binding, and initial/revised workflows cannot introduce writes, other repositories, or mutable context. Dispatch rechecks the same constraints after recovery.
+- Task creation offers one project selector for saved projects, local folders, and cloning. Connecting preserves entered task text and leaves the prepared project selected; saved projects can be reused by later tasks without a separate connection step. Each connected task binds exactly one project, and unready selections block connected submission while offering recovery.
 - New catalog changes are visible without restart; malformed/unready connections do not disrupt unrelated work. Legacy task loading, event replay, projectless intake, and profile enforcement remain compatible.
 - Snapshot materialization handles symlinks, submodules, LFS pointers, large/binary files, path redirection, and altered manifests as specified.
 - Generated brief versions retain provenance, manual edits survive regeneration failures and concurrent saves, and existing tasks keep their original copied context.
@@ -177,4 +184,4 @@ Before claiming the real read-only path works, run genuine host capability probe
 
 ## Review handoff
 
-The next step is user review of this written specification. After approval, use the writing-plans skill to create a concrete implementation plan, including supported-host capability verification and the UI integration dependency. Implementation begins only after that plan has been reviewed and its execution method selected.
+The next step is user review of this revised written specification, including the approved single-selector task-creation flow. After approval, use the writing-plans skill to create a concrete implementation plan, including supported-host capability verification and integration with the existing workspace UI. Implementation begins only after that plan has been reviewed and its execution method selected.
