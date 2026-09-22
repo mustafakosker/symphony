@@ -6,6 +6,8 @@ import type { Issue, Task } from '../../shared/contracts.js';
 import { BoundaryError } from '../../shared/validate.js';
 import { writeAtomic } from '../store/atomic.js';
 import { confinedPath } from '../store/paths.js';
+import type { ProjectDraft } from '../../shared/projects.js';
+import type { ProjectDraftGate } from './project-drafts.js';
 import type { Store } from '../store/task-store.js';
 
 const MAX_BYTES = 1024 * 1024;
@@ -14,10 +16,10 @@ type Receipt = {
   filename: string; key: string; digest: string; bytes: string; taskId: string;
   operationId: string; phase: 'claimed' | 'materialized'; task: Task; holdingName?: string; receivedName?: string;
 };
-type Submission = { requestId: string; digest: string; submissionId: string; filename: string; bytes: string };
+type Submission = { requestId: string; digest: string; submissionId: string; filename: string; bytes: string; projectDraft?: ProjectDraft };
 export type Intake = {
   scan(nowMs: number): Promise<void>;
-  submit(markdown: string, requestId: string): Promise<{ submissionId: string }>;
+  submit(markdown: string, requestId: string, projectDraft?: ProjectDraft): Promise<{ submissionId: string }>;
   issues(): Promise<Issue[]>;
 };
 function hash(bytes: Uint8Array | string): string { return createHash('sha256').update(bytes).digest('hex'); }
@@ -41,7 +43,7 @@ function makeTask(id: string, filename: string, idea: string, nowMs: number): Ta
 }
 
 type IntakeIo = { rename?: typeof rename; open?: typeof open };
-export function createIntake(root: string, store: Store, stableMs: number, io: IntakeIo = {}): Intake {
+export function createIntake(root: string, store: Store, stableMs: number, io: IntakeIo = {}, projectGate?: ProjectDraftGate): Intake {
   if (!Number.isFinite(stableMs) || stableMs < 0) throw new BoundaryError('invalid', 'Invalid stability interval');
   const observations = new Map<string, Observation>();
   const foundIssues = new Map<string, Issue>();
@@ -182,7 +184,14 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
   }
   async function finishReceipt(receipt: Receipt): Promise<void> {
     try {
-      await store.create(receipt.task, receipt.operationId);
+      let task = receipt.task;
+      if (projectGate) {
+        const prepared = await projectGate.prepare({submissionId:receipt.taskId,requestId:receipt.operationId,filename:receipt.filename,markdown:receipt.task.idea});
+        if(prepared.state !== 'ready') { addIssue(receipt.filename, prepared.message); return; }
+        task = prepared.context ? {...task,schemaVersion:2,purpose:'task',projectId:null,title:prepared.title,idea:prepared.markdown,projectContext:prepared.context} : {...task,title:prepared.title,idea:prepared.markdown};
+      }
+      await store.create(task, receipt.operationId);
+      for (const [id, issue] of foundIssues) if(issue.message.startsWith(`${receipt.filename}:`) && issue.taskId === null) foundIssues.delete(id);
     } catch (error) {
       addIssue(receipt.filename, `pickup pending: ${error instanceof Error ? error.message : String(error)}`, receipt.taskId);
       return;
@@ -310,6 +319,7 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
     for (const filename of filenames) if (!collisions.has(lookupKey(filename))) await scanOne(filename, nowMs);
   }
   async function ensurePublished(record: Submission): Promise<void> {
+    if(projectGate) await projectGate.prepare({submissionId:record.submissionId,requestId:record.requestId,filename:record.filename,markdown:decode(Buffer.from(record.bytes,'base64')),projectDraft:record.projectDraft});
     const target = await path(`drafts/${record.filename}`);
     const bytes = Buffer.from(record.bytes, 'base64');
     const existing = await readRegular(`drafts/${record.filename}`, record.filename);
@@ -319,7 +329,7 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
     }
     if (!(await readReceipt(lookupKey(record.filename)))) await writeAtomic(target, bytes);
   }
-  async function submitInternal(markdown: string, requestId: string): Promise<{ submissionId: string }> {
+  async function submitInternal(markdown: string, requestId: string, projectDraft?: ProjectDraft): Promise<{ submissionId: string }> {
     await ensureDirs();
     if (!requestId || typeof requestId !== 'string') throw new BoundaryError('invalid', 'Request ID is required');
     const bytes = Buffer.from(markdown, 'utf8');
@@ -329,7 +339,7 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
     const digest = hash(bytes);
     try {
       const prior = JSON.parse(await readFile(target, 'utf8')) as Submission;
-      if (prior.requestId !== requestId || prior.digest !== digest || hash(Buffer.from(prior.bytes, 'base64')) !== digest) {
+      if (prior.requestId !== requestId || prior.digest !== digest || JSON.stringify(prior.projectDraft) !== JSON.stringify(projectDraft) || hash(Buffer.from(prior.bytes, 'base64')) !== digest) {
         throw new BoundaryError('conflict', 'Request ID has different content');
       }
       await ensurePublished(prior);
@@ -337,7 +347,7 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     const submissionId = randomUUID();
     const filename = `${submissionId}.md`;
-    const record: Submission = { requestId, digest, submissionId, filename, bytes: bytes.toString('base64') };
+    const record: Submission = { requestId, digest, submissionId, filename, bytes: bytes.toString('base64'), ...(projectDraft ? {projectDraft} : {}) };
     await writeAtomic(target, JSON.stringify(record));
     await ensurePublished(record);
     return { submissionId };
@@ -348,8 +358,8 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
       pending = run;
       return run;
     },
-    submit(markdown, requestId) {
-      const run = pending.catch(() => undefined).then(() => submitInternal(markdown, requestId));
+    submit(markdown, requestId, projectDraft) {
+      const run = pending.catch(() => undefined).then(() => submitInternal(markdown, requestId, projectDraft));
       pending = run.then(() => undefined);
       return run;
     },
