@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { ArrowLeft, Check, Clock3, GitBranch, X } from "lucide-react";
+import { Check, Clock3, GitBranch, X } from "lucide-react";
 import type { Command, Task } from "../../shared/contracts";
 import { isClosed, statusLabel, typeLabel } from "../tasks/presentation";
 import { TypeIcon } from "./Icons";
 import ReviewPanel from "./ReviewPanel";
 import WorkflowJourney from "./WorkflowJourney";
 
-type Props = { task: Task; stale: boolean; onBack: () => void; onCommand: (command: Command) => Promise<void> };
-export default function TaskDetail({ task, stale, onBack, onCommand }: Props) {
+type Props = { task: Task; stale: boolean; onBack?: () => void; backLabel?: string; onCommand: (command: Command) => Promise<void> };
+export default function TaskDetail({ task, stale, onCommand }: Props) {
   const [tab, setTab] = useState<"journey" | "activity">("journey");
   const pending = isClosed(task) ? [] : task.reviews.filter(review => review.decision === null);
   const events = [
@@ -15,8 +15,7 @@ export default function TaskDetail({ task, stale, onBack, onCommand }: Props) {
     ...task.runs.map(run => ({ id: `run-${run.id}`, at: run.startedAt, text: `${run.stepId}: ${run.result?.summary ?? run.phase}` })),
   ];
   const lastResult = [...task.runs].reverse().find(run => run.result)?.result;
-  return <main className="detail-panel" aria-label="Task details"><div className="detail-scroll"><div className="detail-inner">
-    <button className="text-button back-button" onClick={onBack}><ArrowLeft size={15} /> Inbox</button>
+  return <section className="detail-panel" aria-label="Task details"><div className="detail-scroll"><div className="detail-inner">
     <div className="detail-title-row"><h2 className="detail-title">{task.title}</h2><span className="detail-status"><span className={`status status-${task.status}`}><i />{statusLabel(task)}</span></span></div>
     <div className="detail-properties">
       <span className={`type-label ${task.type}`}><TypeIcon type={task.type} />{typeLabel(task.type)}</span>
@@ -32,5 +31,5 @@ export default function TaskDetail({ task, stale, onBack, onCommand }: Props) {
     {isClosed(task) && task.artifacts.length > 0 && <section className="task-artifacts"><h3>Saved output</h3><ul>{task.artifacts.map(ref => <li key={`${ref.id}-${ref.version}`}><a href={`/api/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(ref.id)}?version=${ref.version}`} download>{ref.id} · v{ref.version}</a></li>)}</ul></section>}
     <div className="detail-tabs"><div role="tablist" aria-label="Task view"><button role="tab" aria-selected={tab === "journey"} className={tab === "journey" ? "selected" : ""} onClick={() => setTab("journey")}><GitBranch size={15} /> Journey</button><button role="tab" aria-selected={tab === "activity"} className={tab === "activity" ? "selected" : ""} onClick={() => setTab("activity")}><Clock3 size={15} /> Activity <span>{events.length}</span></button></div><span className="workflow-version">{task.workflow ? `Workflow v${task.workflow.version}` : "Awaiting workflow"}</span></div>
     {tab === "journey" ? <WorkflowJourney task={task} disabled={stale} onCommand={onCommand} /> : <section className="activity-view" aria-label="Task activity"><h3>Task activity</h3><ol>{events.map(event => <li key={event.id}><span className="activity-dot"><Check size={12} /></span><div><p>{event.text}</p>{event.at && <span>{new Date(event.at).toLocaleString()}</span>}</div></li>)}</ol></section>}
-  </div></div></main>;
+  </div></div></section>;
 }

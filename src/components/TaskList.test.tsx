@@ -51,7 +51,7 @@ it("restores focus to the list heading if the previous row is unavailable", () =
   render(<TaskList tasks={[]} filter="all" query="" selectedId={null}
     loading={false} canSubmit onQuery={vi.fn()} onSelect={vi.fn()} onNew={vi.fn()}
     returnFocusId="missing" />);
-  expect(screen.getByRole("heading", { name: "Tasks" })).toHaveFocus();
+  expect(screen.getByRole("heading", { name: "All tasks" })).toHaveFocus();
 });
 
 it("shows loading placeholders without claiming the list is empty", () => {

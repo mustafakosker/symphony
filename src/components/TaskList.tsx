@@ -27,6 +27,7 @@ export default function TaskList({
   onQuery, onSelect, onNew, searchRef, returnFocusId,
 }: TaskListProps) {
   const groups = groupTasks(tasks, filter, query);
+  const viewName = { all: "All tasks", review: "Needs review", active: "Active", closed: "Closed" }[filter];
   const headingRef = useRef<HTMLHeadingElement>(null);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
 
@@ -46,7 +47,7 @@ export default function TaskList({
     <section className="workspace-task-list" aria-label="Task list">
       <header className="workspace-task-header">
         <div className="workspace-task-heading">
-          <h1 ref={headingRef} tabIndex={-1}>Tasks</h1>
+          <h1 ref={headingRef} tabIndex={-1}>{viewName}</h1>
           <Badge variant="outline" aria-label={`${tasks.length} tasks`}>{tasks.length}</Badge>
         </div>
         <Button onClick={onNew} disabled={!canSubmit}>

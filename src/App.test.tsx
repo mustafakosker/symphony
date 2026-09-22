@@ -38,6 +38,55 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+async function openDraft() {
+  await screen.findByRole("heading", { name: "All tasks" });
+  await userEvent.click(within(screen.getByRole("region", { name: "Task list" }))
+    .getByRole("button", { name: /^Draft.*(?:Triaging|Needs review|Queued|Running|Blocked)/s }));
+  return screen.findByRole("heading", { name: "Draft" });
+}
+
+it("returns to the originating filtered list and focuses the opened task", async () => {
+  const user = userEvent.setup();
+  render(<App api={api()} />);
+  await screen.findByRole("heading", { name: "All tasks" });
+  await user.click(within(screen.getByRole("navigation", { name: "Workspace" }))
+    .getByRole("button", { name: /Needs review/ }));
+  const row = await screen.findByRole("button", { name: /Review webhook retries.*Needs review/ });
+  await user.click(row);
+  expect(screen.getByRole("main")).toHaveTextContent("Review webhook retries");
+  await user.click(screen.getByRole("button", { name: "Back to needs review" }));
+  expect(screen.getByRole("button", { name: /Review webhook retries.*Needs review/ })).toHaveFocus();
+});
+
+it("loads tasks when browser preference storage denies access", async () => {
+  const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("denied"); });
+  const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
+  const user = userEvent.setup();
+  render(<App api={api()} />);
+  await screen.findByRole("heading", { name: "All tasks" });
+  await user.click(screen.getByRole("button", { name: /Review webhook retries.*Needs review/ }));
+  expect(screen.getByRole("main")).toHaveTextContent("Review webhook retries");
+  expect(get).toHaveBeenCalled();
+  expect(set).toHaveBeenCalled();
+});
+
+it("closes the mobile workspace menu and focuses search with Ctrl+K", async () => {
+  const width = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 600 });
+  try {
+    const user = userEvent.setup();
+    render(<App api={api()} />);
+    await screen.findByRole("heading", { name: "All tasks" });
+    await user.click(screen.getByRole("button", { name: "Open workspace menu" }));
+    expect(screen.getByRole("dialog", { name: "Sidebar" })).toBeInTheDocument();
+    await user.keyboard("{Control>}k{/Control}");
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search tasks" })).toHaveFocus();
+  } finally {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  }
+});
+
 it("does not invent work when the coordinator is unavailable", async () => {
   const offline = api(async () => {
     throw new Error("Coordinator unavailable");
@@ -53,20 +102,17 @@ it("does not invent work when the coordinator is unavailable", async () => {
   ).not.toBeInTheDocument();
 });
 
-it("filters and searches coordinator tasks while preserving the selected detail", async () => {
+it("filters and searches coordinator tasks while retaining the selected task", async () => {
   const user = userEvent.setup();
   render(<App api={api()} />);
-  expect(
-    await screen.findByRole("heading", { name: "Draft" }),
-  ).toBeInTheDocument();
+  await openDraft();
+  await user.click(screen.getByRole("button", { name: "Back to all tasks" }));
   await user.click(
-    within(screen.getByLabelText("Filter tasks")).getByRole("button", {
+    within(screen.getByRole("navigation", { name: "Workspace" })).getByRole("button", {
       name: /Needs review/,
     }),
   );
-  const inbox = within(
-    screen.getByRole("complementary", { name: "Task inbox" }),
-  );
+  const inbox = within(screen.getByRole("region", { name: "Task list" }));
   expect(
     inbox.getByRole("button", { name: /Review webhook retries/ }),
   ).toBeInTheDocument();
@@ -80,15 +126,17 @@ it("filters and searches coordinator tasks while preserving the selected detail"
   expect(
     inbox.queryByRole("button", { name: /Review webhook retries/ }),
   ).not.toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Draft" })).toBeInTheDocument();
+  await user.clear(screen.getByRole("textbox", { name: "Search tasks" }));
+  await user.click(within(screen.getByRole("navigation", { name: "Workspace" })).getByRole("button", { name: /All tasks/ }));
+  expect(inbox.getByRole("button", { name: /^Draft.*Triaging/s })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("submits a required Markdown brief and waits for coordinator pickup", async () => {
   const user = userEvent.setup();
   const boundary = api();
   render(<App api={boundary} />);
-  await screen.findByRole("heading", { name: "Draft" });
-  await user.click(screen.getByRole("button", { name: "Closed" }));
+  await screen.findByRole("heading", { name: "All tasks" });
+  await user.click(within(screen.getByRole("navigation", { name: "Workspace" })).getByRole("button", { name: /Closed/ }));
   await user.click(screen.getByRole("button", { name: "New task" }));
   await user.click(screen.getByRole("button", { name: "Submit draft" }));
   expect(screen.getByRole("alert")).toHaveTextContent("brief");
@@ -108,15 +156,12 @@ it("submits a required Markdown brief and waits for coordinator pickup", async (
     "# Review failed retries\n\nKeep the original payload.",
     expect.any(String),
   );
-  expect(screen.getByRole("button", { name: "All tasks" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  expect(within(screen.getByRole("navigation", { name: "Workspace" })).getByRole("button", { name: /All tasks/ })).toHaveAttribute("aria-current", "page");
 });
 
 it("does not expose demo execution actions", async () => {
   render(<App api={api()} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await openDraft();
   expect(screen.queryByText(/demo|simulated/i)).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", {
@@ -147,14 +192,17 @@ it("shows an unavailable selected record without choosing a different task", asy
 });
 
 it("keeps the last known detail on disconnect and disables draft submission", async () => {
+  const user = userEvent.setup();
+  const reviewing = waitingTask();
   const boundary = api(
     vi
       .fn()
-      .mockResolvedValueOnce(view)
+      .mockResolvedValueOnce({ tasks: [reviewing], issues: [], coordinator: "ready" })
       .mockRejectedValue(new Error("Coordinator unavailable")),
   );
   render(<App api={boundary} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await openDraft();
+  await user.type(screen.getByRole("textbox", { name: "Feedback" }), "Unsent review note");
   // A newly mounted client can encounter a disconnect on its next coordinator fetch.
   const original = boundary.load;
   await waitFor(() => expect(original).toHaveBeenCalledTimes(1));
@@ -167,6 +215,12 @@ it("keeps the last known detail on disconnect and disables draft submission", as
     { timeout: 3500 },
   );
   expect(screen.getByRole("heading", { name: "Draft" })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Feedback" })).toHaveValue("Unsent review note");
+  expect(screen.getByRole("textbox", { name: "Feedback" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Request changes" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reject task" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Back to all tasks" }));
   expect(screen.getByRole("button", { name: "New task" })).toBeDisabled();
 });
 
@@ -177,9 +231,7 @@ it("shows the pending workflow review beside the proposed steps", async () => {
     coordinator: "ready",
   };
   render(<App api={api(async () => proposed)} />);
-  expect(
-    await screen.findByRole("heading", { name: "Draft" }),
-  ).toBeInTheDocument();
+  await openDraft();
   expect(screen.getByText("Approve proposed workflow?")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Research/ })).toBeInTheDocument();
 });
@@ -218,7 +270,7 @@ it("shows the artifact version bound to a pending review", async () => {
       }))}
     />,
   );
-  await screen.findByRole("heading", { name: "Draft" });
+  await openDraft();
   expect(screen.getByRole("link", { name: "findings · v1" })).toHaveAttribute(
     "href",
     `/api/tasks/${reviewing.id}/artifacts/findings?version=1`,
@@ -232,7 +284,7 @@ it("closes the draft dialog with Escape without submitting", async () => {
   const user = userEvent.setup();
   const boundary = api();
   render(<App api={boundary} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await screen.findByRole("heading", { name: "All tasks" });
   await user.click(screen.getByRole("button", { name: "New task" }));
   const opener = screen.getByRole("button", { name: "New task", hidden: true });
   expect(
@@ -249,7 +301,7 @@ it("closes the draft dialog with Escape without submitting", async () => {
 it("wraps keyboard focus inside the open draft dialog", async () => {
   const user = userEvent.setup();
   render(<App api={api()} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await screen.findByRole("heading", { name: "All tasks" });
   await user.click(screen.getByRole("button", { name: "New task" }));
   const dialog = screen.getByRole("dialog", { name: "Submit a draft" });
   within(dialog).getByRole("button", { name: "Submit draft" }).focus();
@@ -264,7 +316,7 @@ it("uses prospective intake copy before and after a failed POST", async () => {
   const boundary = api();
   vi.mocked(boundary.submit).mockRejectedValue(new Error("Network lost"));
   render(<App api={boundary} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await screen.findByRole("heading", { name: "All tasks" });
   await user.click(screen.getByRole("button", { name: "New task" }));
   expect(
     screen.getByRole("dialog", { name: "Submit a draft" }),
@@ -294,23 +346,25 @@ it("keeps a newly selected task visible while an earlier task command resolves",
   const boundary = api(async () => ({ tasks: [persisted, second], issues: [], coordinator: "ready" }));
   vi.mocked(boundary.command).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
   render(<App api={boundary} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await openDraft();
   await user.click(screen.getByRole("button", { name: "Approve" }));
-  await user.click(within(screen.getByRole("complementary", { name: "Task inbox" })).getByRole("button", { name: /Review webhook retries/ }));
+  await user.click(screen.getByRole("button", { name: "Back to all tasks" }));
+  await user.click(within(screen.getByRole("region", { name: "Task list" })).getByRole("button", { name: /Review webhook retries/ }));
   expect(screen.getByRole("heading", { name: "Review webhook retries" })).toBeInTheDocument();
   persisted = { ...first, status: "queued", revision: 2, reviews: [] };
   finish(persisted);
-  const inbox = within(screen.getByRole("complementary", { name: "Task inbox" }));
-  await waitFor(() => expect(inbox.getByRole("button", { name: /^Unknown.*Draft.*Queued/s })).toBeInTheDocument());
   expect(screen.getByRole("heading", { name: "Review webhook retries" })).toBeInTheDocument();
-  expect(inbox.getByRole("button", { name: /Review webhook retries/ })).toHaveAttribute("aria-pressed", "true");
+  await user.click(screen.getByRole("button", { name: "Back to all tasks" }));
+  const list = within(screen.getByRole("region", { name: "Task list" }));
+  await waitFor(() => expect(list.getByRole("button", { name: /Draft.*Queued/s })).toBeInTheDocument());
+  expect(list.getByRole("button", { name: /Review webhook retries/ })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("disables a later pending review until the first decision is saved", async () => {
   const reviewing = waitingTask();
   reviewing.reviews.push({ ...reviewing.reviews[0], id: "second-review", prompt: "Second decision" });
   render(<App api={api(async () => ({ tasks: [reviewing], issues: [], coordinator: "ready" }))} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await openDraft();
   const panels = screen.getAllByRole("region", { name: "workflow review" });
   expect(within(panels[0]).getByRole("button", { name: "Approve" })).toBeEnabled();
   expect(within(panels[1]).getByRole("button", { name: "Approve" })).toBeDisabled();
@@ -326,7 +380,7 @@ it("keeps Continue available while a pending pause hides checkpoint insertion", 
     stepId: "research", artifacts: [], prompt: "Resume this task?", answer: null, decision: null }];
   const boundary = api(async () => ({ tasks: [paused], issues: [], coordinator: "ready" }));
   render(<App api={boundary} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await openDraft();
   expect(screen.getByRole("button", { name: /Research/ })).toHaveAttribute("aria-expanded", "true");
   expect(screen.queryByRole("button", { name: "Review before this step" })).not.toBeInTheDocument();
   const continueButton = screen.getByRole("button", { name: "Continue" });
@@ -337,10 +391,13 @@ it("keeps Continue available while a pending pause hides checkpoint insertion", 
 });
 
 it("wraps a long task title and preserves multiline review text", async () => {
+  const user = userEvent.setup();
   const reviewing = waitingTask();
   reviewing.title = "A".repeat(180);
   reviewing.reviews[0].prompt = "First line\nSecond line";
   render(<App api={api(async () => ({ tasks: [reviewing], issues: [], coordinator: "ready" }))} />);
+  await screen.findByRole("heading", { name: "All tasks" });
+  await user.click(screen.getByRole("button", { name: new RegExp(reviewing.title) }));
   expect(await screen.findByRole("heading", { name: reviewing.title })).toBeInTheDocument();
   expect(screen.getByText(/First line\s+Second line/)).toHaveClass("review-prompt");
 });
@@ -358,7 +415,7 @@ it("routes cancellation through the coordinator and keeps partial output links",
   const boundary = api(async () => ({ tasks: [persisted], issues: [], coordinator: "ready" }));
   vi.mocked(boundary.command).mockImplementation(async () => { persisted = cancelled; return cancelled; });
   render(<App api={boundary} />);
-  await screen.findByRole("heading", { name: "Draft" });
+  await openDraft();
   await user.click(screen.getByRole("button", { name: "Cancel task" }));
   expect(boundary.command).toHaveBeenCalledWith(expect.objectContaining({ taskId: current.id, expectedRevision: 1, action: { kind: "cancel" } }));
   expect(await screen.findByRole("link", { name: "notes · v2" })).toHaveAttribute("href", `/api/tasks/${current.id}/artifacts/notes?version=2`);

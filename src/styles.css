@@ -21,6 +21,9 @@
 body {
   margin: 0;
 }
+#root {
+  min-width: 0;
+}
 button,
 input,
 textarea {

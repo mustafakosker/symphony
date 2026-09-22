@@ -1,208 +1,74 @@
-import { useEffect, useState } from "react";
-import { ArrowUpRight, CircleHelp, Command, Sparkles, X } from "lucide-react";
-import Inbox, { type Filter } from "./components/Inbox";
+import { useEffect, useReducer, useRef, useState } from "react";
+import { Command } from "lucide-react";
 import NewTaskDialog from "./components/NewTaskDialog";
 import TaskDetail from "./components/TaskDetail";
-import { needsReview } from "./tasks/presentation";
+import TaskList from "./components/TaskList";
+import WorkspaceShell from "./components/WorkspaceShell";
+import { navigate, parsePreferences } from "./tasks/navigation";
 import { workspaceApi, type WorkspaceApi } from "./tasks/api";
 import { useWorkspace } from "./tasks/useWorkspace";
 
 const PREF_KEY = "symphony-workspace-preferences-v1";
-function preferences(): { selectedId: string | null; filter: Filter } {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(PREF_KEY) ?? "null");
-    if (value && typeof value === "object") {
-      const record = value as Record<string, unknown>;
-      return {
-        selectedId:
-          typeof record.selectedId === "string" ? record.selectedId : null,
-        filter: ["all", "review", "active", "closed"].includes(
-          String(record.filter),
-        )
-          ? (record.filter as Filter)
-          : "all",
-      };
-    }
-  } catch {
-    /* UI preferences are optional. */
-  }
-  return { selectedId: null, filter: "all" };
-}
+
 export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
   const workspace = useWorkspace(api);
-  const [initial] = useState(preferences);
-  const [selectedId, setSelectedId] = useState(initial.selectedId);
+  const [navigation, dispatch] = useReducer(navigate, undefined, () => {
+    try { return parsePreferences(localStorage.getItem(PREF_KEY)); }
+    catch { return parsePreferences(null); }
+  });
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>(initial.filter);
   const [creating, setCreating] = useState(false);
-  const [mobileDetail, setMobileDetail] = useState(false);
-  const [help, setHelp] = useState(false);
+  const [searchPending, setSearchPending] = useState(false);
+  const [returnFocusId, setReturnFocusId] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const tasks = workspace.view?.tasks ?? [];
+  const selectedTask = tasks.find(task => task.id === navigation.selectedId) ?? null;
+  const detail = navigation.screen === "detail";
+  const missing = detail && navigation.selectedId !== null && workspace.view !== null && selectedTask === null;
+  const loading = workspace.view === null && workspace.error === null;
+
   useEffect(() => {
-    if (!selectedId && tasks.length) setSelectedId(tasks[0].id);
-  }, [selectedId, tasks]);
+    try { localStorage.setItem(PREF_KEY, JSON.stringify(navigation)); }
+    catch { /* Presentation preferences are optional. */ }
+  }, [navigation]);
+
   useEffect(() => {
-    try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ selectedId, filter }));
-    } catch {
-      /* Optional preference persistence. */
+    if (searchPending && !detail && searchRef.current) {
+      searchRef.current.focus();
+      setSearchPending(false);
     }
-  }, [selectedId, filter]);
-  const task = tasks.find((item) => item.id === selectedId);
-  const missing = !!selectedId && !!workspace.view && !task;
-  const reviewCount = tasks.filter(needsReview).length;
-  return (
-    <div className="app-shell">
-      <header className="app-header">
-        <a
-          className="brand"
-          href="#"
-          onClick={(event) => {
-            event.preventDefault();
-            setMobileDetail(false);
-          }}
-          aria-label="Symphony home"
-        >
-          <span className="brand-mark">
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>
-          <span>
-            symphony<span className="brand-period">.</span>
-          </span>
-        </a>
-        <div className="header-divider" />
-        <span className="workspace-name">
-          Personal workspace <span className="workspace-chevron">⌄</span>
-        </span>
-        <span className="header-spacer" />
-        <span className="coordinator-status">
-          <span className={workspace.connected ? "green-dot" : "amber-dot"} />
-          Coordinator{" "}
-          {workspace.connected
-            ? workspace.view?.coordinator === "degraded"
-              ? "Degraded"
-              : "Connected"
-            : "Disconnected"}
-        </span>
-        <div className="workspace-bar-right">
-          <span className="review-summary">
-            <span className="amber-dot" />
-            {reviewCount} awaiting your review
-          </span>
-          <button
-            className="icon-button"
-            aria-label="About this workspace"
-            onClick={() => setHelp((value) => !value)}
-          >
-            <CircleHelp size={17} />
-          </button>
-        </div>
-        <span className="avatar" title="Your workspace">
-          MK
-        </span>
-      </header>
-      {help && (
-        <div className="help-banner">
-          <Sparkles size={17} />
-          <p>
-            <strong>Task workspace.</strong> Add a Markdown draft here or place
-            one in OneDrive. The coordinator picks it up, runs workflow steps,
-            and pauses for your reviews in this workspace.
-          </p>
-          <button
-            className="icon-button"
-            aria-label="Close workspace information"
-            onClick={() => setHelp(false)}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-      {!workspace.connected && (
-        <div className="notice-banner error" role="alert">
-          {workspace.error ?? "Connecting to the coordinator…"}{" "}
-          {workspace.view &&
-            "Showing the last known workspace; actions are unavailable."}
-        </div>
-      )}
-      {workspace.connected && workspace.error && (
-        <div className="notice-banner error" role="alert">
-          {workspace.error}
-        </div>
-      )}
-      {workspace.submissionId && (
-        <div className="notice-banner" role="status">
-          Submitted; waiting for pickup
-        </div>
-      )}
-      {workspace.view?.issues.map((issue) => (
-        <div key={issue.id} className="notice-banner" role="status">
-          {issue.message}
-        </div>
-      ))}
-      <div className={`workspace-body ${mobileDetail ? "show-detail" : ""}`}>
-        <Inbox
-          tasks={tasks}
-          selectedId={selectedId}
-          query={query}
-          filter={filter}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setMobileDetail(true);
-          }}
-          onQuery={setQuery}
-          onFilter={setFilter}
-          onNew={() => setCreating(true)}
-          canSubmit={workspace.connected}
-        />
-        {task ? (
-          <TaskDetail
-            key={task.id}
-            task={task}
-            stale={!workspace.connected}
-            onBack={() => setMobileDetail(false)}
-            onCommand={workspace.act}
-          />
-        ) : (
-          <main className="empty-state" aria-label="Task details">
-            <Command size={32} />
-            <h2>
-              {missing
-                ? "Task unavailable"
-                : workspace.connected
-                  ? "A little space for your next idea."
-                  : "Waiting for coordinator"}
-            </h2>
-            <p>
-              {missing
-                ? "The selected task is no longer in the coordinator view. Select another task to continue."
-                : "Submit a Markdown draft to get started."}
-            </p>
-            {!missing && (
-              <button
-                className="button primary"
-                onClick={() => setCreating(true)}
-                disabled={!workspace.connected}
-              >
-                Submit a draft <ArrowUpRight size={15} />
-              </button>
-            )}
-          </main>
-        )}
+  }, [searchPending, detail, workspace.view]);
+
+  const onSearch = () => {
+    dispatch({ type: "back" });
+    setReturnFocusId(null);
+    setSearchPending(true);
+  };
+  return <>
+    <WorkspaceShell tasks={tasks} filter={navigation.filter} task={selectedTask}
+      connected={workspace.connected} coordinator={workspace.view?.coordinator ?? null}
+      detail={detail} onFilter={filter => { dispatch({ type: "filter", filter }); setReturnFocusId(null); }}
+      onSearch={onSearch} onBack={() => { dispatch({ type: "back" }); setReturnFocusId(navigation.selectedId); }}>
+      <div className="workspace-alerts" aria-label="Workspace notices">
+        {!workspace.connected && <div className="notice-banner error" role="alert">
+          {workspace.error ?? "Connecting to the coordinator…"}
+          {workspace.view && " Showing the last known workspace; actions are unavailable."}
+        </div>}
+        {workspace.connected && workspace.error && <div className="notice-banner error" role="alert">{workspace.error}</div>}
+        {workspace.submissionId && <div className="notice-banner" role="status">Submitted; waiting for pickup</div>}
+        {workspace.view?.issues.map(issue => <div key={issue.id} className="notice-banner" role="status">{issue.message}</div>)}
       </div>
-      <NewTaskDialog
-        open={creating}
-        onClose={() => setCreating(false)}
-        onSubmit={async (markdown) => {
-          await workspace.submit(markdown);
-          setQuery("");
-          setFilter("all");
-        }}
-        canSubmit={workspace.connected}
-      />
-    </div>
-  );
+      {detail ? selectedTask ? <TaskDetail key={selectedTask.id} task={selectedTask} stale={!workspace.connected} onCommand={workspace.act} />
+        : missing ? <section className="workspace-state"><Command size={28} /><h1>Task unavailable</h1><p>The selected task is no longer in the coordinator view. Return to the list to choose another task.</p></section>
+        : loading ? <section className="workspace-state"><h1>Loading task…</h1></section>
+        : <section className="workspace-state"><h1>Unable to load task</h1><p>Try again when the coordinator is available.</p></section>
+      : !workspace.view && workspace.error ? <section className="workspace-state"><h1>Unable to load tasks</h1><p>{workspace.error}</p></section>
+      : <TaskList tasks={tasks} filter={navigation.filter} query={query} selectedId={navigation.selectedId}
+          loading={loading} canSubmit={workspace.connected} searchRef={searchRef} returnFocusId={returnFocusId}
+          onQuery={setQuery} onSelect={id => { dispatch({ type: "select", id }); setReturnFocusId(null); }}
+          onNew={() => setCreating(true)} />}
+    </WorkspaceShell>
+    <NewTaskDialog open={creating} onClose={() => setCreating(false)} canSubmit={workspace.connected}
+      onSubmit={async markdown => { await workspace.submit(markdown); setQuery(""); dispatch({ type: "submitted" }); setReturnFocusId(null); }} />
+  </>;
 }
