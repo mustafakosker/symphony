@@ -50,16 +50,21 @@ it('never dispatches a waiting task and does not await another run in tick', asy
 
 it('runs the pre-dispatch hook before reading eligible tasks', async () => {
   const { store, control, registry, settings, intake } = await setup();
-  registry.roles.push({ role: 'researcher', instructions: 'Research', skills: [], cliProfile: 'researcher', actions: ['read'] });
-  const waiting = await store.create(waitingTask(), 'waiting');
+  const task = waitingTask(); task.proposedWorkflow = null;
+  task.reviews = [{ id: 'question-review', kind: 'question', workflowVersion: null, stepId: '$triage',
+    artifacts: [], prompt: 'Which version?', answer: null, decision: null }];
+  const waiting = await store.create(task, 'waiting');
   const coordinator = createCoordinator({ store, intake, registry, runner: control.runner, settings,
     beforeDispatch: async () => {
       const current = await store.get(waiting.id);
       await applyHumanCommand(store, coordinator, { taskId: waiting.id, expectedRevision: current.revision,
-        requestId: 'hook-approval', action: { kind: 'approve', reviewId: current.reviews[0].id, artifactDigests: [] } });
+        requestId: 'hook-answer', action: { kind: 'answer', reviewId: current.reviews[0].id, text: 'Java 17' } });
     } });
   await coordinator.tick(new Date('2026-09-21T12:00:00Z'));
-  expect(control.starts.map(start => start.task.id)).toContain(waiting.id);
+  expect(control.starts).toHaveLength(1);
+  expect(control.starts[0].task.id).toBe(waiting.id);
+  expect(control.starts[0].step.id).toBe('$triage');
+  expect((await store.get(waiting.id)).reviews[0]).toMatchObject({ decision: 'answer', answer: 'Java 17' });
 });
 
 it('rejects a failed pre-dispatch hook without launching agents', async () => {

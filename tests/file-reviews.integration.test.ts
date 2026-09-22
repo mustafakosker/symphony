@@ -6,6 +6,9 @@ import { join, resolve } from 'node:path';
 import { startApplication, type Application } from '../server/main.js';
 import { loadSettings } from '../server/config/settings.js';
 import { createCodexRunner } from '../server/codex/adapter.js';
+import { openStore } from '../server/store/task-store.js';
+import { waitingTask } from '../server/testing/fixtures.js';
+import { makeRequest, renderDraft } from '../server/file-reviews/document.js';
 import type { Task } from '../shared/contracts.js';
 
 const roots: string[] = [];
@@ -79,12 +82,19 @@ it('accepts a renamed workflow approval and continues to the next review', async
 });
 
 it('leaves ready files inert when disabled and reports unknown files when enabled', async () => {
+  const pending = waitingTask();
   const disabled = await setup(false, async workspaceRoot => {
+    const store = await openStore(workspaceRoot);
+    await store.create(pending, 'seed-waiting');
+    const request = makeRequest(pending, pending.reviews[0], crypto.randomUUID());
     await mkdir(join(workspaceRoot, 'reviews'));
-    await writeFile(join(workspaceRoot, 'reviews', 'stray.ready.md'), 'action: approve\n');
+    await writeFile(join(workspaceRoot, 'reviews', `${request.basename}.ready.md`),
+      renderDraft(request).replace('action: \n', 'action: approve\n'));
   });
   await new Promise(done => setTimeout(done, 100));
-  expect((await workspace(disabled.app)).tasks).toHaveLength(0);
+  const unchanged = (await workspace(disabled.app)).tasks.find(task => task.id === pending.id)!;
+  expect(unchanged).toMatchObject({ revision: pending.revision, status: 'waiting-for-human' });
+  expect(unchanged.reviews[0].decision).toBeNull();
   await expect(readdir(join(disabled.localRoot, 'file-reviews'))).rejects.toMatchObject({ code: 'ENOENT' });
   const enabled = await setup(true, async workspaceRoot => {
     await mkdir(join(workspaceRoot, 'reviews'));
