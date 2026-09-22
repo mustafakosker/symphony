@@ -7,6 +7,7 @@
   "scanMs": 2000,
   "stableMs": 2000,
   "fileReviewsEnabled": false,
+  "projectsRoot": null,
   "runTimeoutMs": 1800000,
   "stopGraceMs": 5000,
   "outputLimitBytes": 10485760,

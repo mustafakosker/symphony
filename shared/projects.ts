@@ -58,3 +58,5 @@ export type OperationStatus = {
   state: 'queued' | 'running' | 'needs-input' | 'failed' | 'complete';
   message: string; taskId: string | null;
 };
+export type RootSetting = { projectsRoot: string | null; revision: string; generation: string;
+  state: 'unset' | 'ready' | 'unavailable'; message: string | null };

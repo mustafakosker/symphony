@@ -8,12 +8,15 @@ export type Settings = {
   runTimeoutMs: number; stopGraceMs: number; outputLimitBytes: number;
   allowedOrigin: string; environmentKeys: string[]; verifiedProfilesPath: string | null;
   fileReviewsEnabled: boolean;
+  projectsRoot: string | null; projectSnapshotMaxEntries: number; projectSnapshotMaxBytes: number;
+  projectSnapshotMaxFileBytes: number; projectGitTimeoutMs: number;
 };
 
 const defaults = { port: 4317, concurrency: 1, scanMs: 2000, stableMs: 2000,
   runTimeoutMs: 30 * 60 * 1000, stopGraceMs: 5000, outputLimitBytes: 10 * 1024 * 1024,
   allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [] as string[], verifiedProfilesPath: null as string | null,
-  fileReviewsEnabled: false };
+  fileReviewsEnabled: false, projectsRoot: null as string | null, projectSnapshotMaxEntries: 100000,
+  projectSnapshotMaxBytes: 1073741824, projectSnapshotMaxFileBytes: 67108864, projectGitTimeoutMs: 120000 };
 
 async function binaryPath(input: string): Promise<string> {
   const candidates = input.includes('/') ? [input] : (process.env.PATH ?? '').split(delimiter).map(dir => resolve(dir, input));
@@ -38,9 +41,11 @@ export async function loadSettings(path: string): Promise<Settings> {
   if (workspace === local || workspace.startsWith(local + sep) || local.startsWith(workspace + sep)) throw new Error('workspaceRoot and localRoot must be disjoint');
   const settings: Settings = { ...defaults, ...input, workspaceRoot: workspace, localRoot: local,
     codexBinary: await binaryPath(input.codexBinary as string) } as Settings;
-  for (const field of ['port', 'concurrency', 'scanMs', 'stableMs', 'runTimeoutMs', 'stopGraceMs', 'outputLimitBytes'] as const) {
+  for (const field of ['port', 'concurrency', 'scanMs', 'stableMs', 'runTimeoutMs', 'stopGraceMs', 'outputLimitBytes', 'projectSnapshotMaxEntries', 'projectSnapshotMaxBytes', 'projectSnapshotMaxFileBytes', 'projectGitTimeoutMs'] as const) {
     if (!Number.isSafeInteger(settings[field]) || settings[field] <= 0 || (field === 'port' && settings[field] > 65535)) throw new Error(`${field} must be a positive integer`);
   }
+  if (settings.projectsRoot !== null && (typeof settings.projectsRoot !== 'string' || !isAbsolute(settings.projectsRoot)))
+    throw new Error('projectsRoot must be null or an absolute path');
   if (typeof settings.fileReviewsEnabled !== 'boolean') throw new Error('fileReviewsEnabled must be a boolean');
   try {
     const origin = new URL(settings.allowedOrigin);
