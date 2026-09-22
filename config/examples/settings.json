@@ -6,6 +6,7 @@
   "concurrency": 1,
   "scanMs": 2000,
   "stableMs": 2000,
+  "fileReviewsEnabled": false,
   "runTimeoutMs": 1800000,
   "stopGraceMs": 5000,
   "outputLimitBytes": 10485760,

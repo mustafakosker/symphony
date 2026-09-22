@@ -9,6 +9,8 @@ import { createCodexRunner } from '../server/codex/adapter.js';
 import { openStore } from '../server/store/task-store.js';
 import { waitingTask } from '../server/testing/fixtures.js';
 import { makeRequest, renderDraft } from '../server/file-reviews/document.js';
+import { loadRecords } from '../server/file-reviews/io.js';
+import { matchesBinding } from '../server/file-reviews/model.js';
 import type { Task } from '../shared/contracts.js';
 
 const roots: string[] = [];
@@ -59,6 +61,105 @@ async function until<T>(read: () => Promise<T>, check: (value: T) => boolean): P
 async function workspace(app: Application): Promise<{ tasks: Task[]; issues: { message: string }[] }> {
   return await (await fetch(`${app.address}/api/workspace`)).json();
 }
+
+async function pendingReview(app: Application, id: string, kind: 'question' | 'workflow' | 'artifact', after = -1): Promise<Task> {
+  return until(async () => (await workspace(app)).tasks.find(task => task.id === id)!, task =>
+    task.revision > after && task.reviews.some(review => review.kind === kind && review.decision === null));
+}
+
+async function draftFor(workspaceRoot: string, text: string): Promise<string> {
+  const names = await until(() => readdir(join(workspaceRoot, 'reviews')).catch(() => [] as string[]), asyncNames =>
+    asyncNames.some(name => name.endsWith('.md') && !name.endsWith('.ready.md') && !name.endsWith('.receipt.md')));
+  for (const name of names.filter(name => name.endsWith('.md') && !name.endsWith('.ready.md') && !name.endsWith('.receipt.md'))) {
+    const path = join(workspaceRoot, 'reviews', name);
+    if ((await readFile(path, 'utf8')).includes(text)) return path;
+  }
+  return until(async () => {
+    const files = await readdir(join(workspaceRoot, 'reviews'));
+    for (const name of files.filter(name => name.endsWith('.md') && !name.endsWith('.ready.md') && !name.endsWith('.receipt.md'))) {
+      const path = join(workspaceRoot, 'reviews', name);
+      if ((await readFile(path, 'utf8')).includes(text)) return path;
+    }
+    return '';
+  }, Boolean);
+}
+
+async function submit(workspaceRoot: string, draft: string, action: string, body = ''): Promise<string> {
+  const original = await readFile(draft, 'utf8');
+  const response = `action: ${action}\n\n${body}`;
+  await writeFile(draft, original.replace(/action: (?:answer)?\n\n[\s\S]*$/, response));
+  const ready = draft.replace(/\.md$/, '.ready.md');
+  const submitted = await readFile(draft, 'utf8');
+  await rename(draft, ready);
+  const receipt = await until(() => readFile(ready.replace('.ready.md', '.receipt.md'), 'utf8').catch(() => ''), Boolean);
+  expect(receipt).toContain('# Review receipt: Accepted');
+  expect(receipt.split('## Processed response\n')[1].match(/^(`{3,})\n([\s\S]*?)\n\1\n$/)?.[2]).toBe(submitted);
+  return receipt;
+}
+
+it('completes questions, workflow and exact artifact approvals through saved files', async () => {
+  const { workspaceRoot, localRoot, app } = await setup(true);
+  await mkdir(join(workspaceRoot, 'drafts'));
+  await writeFile(join(workspaceRoot, 'drafts', 'lifecycle.md'), '# Lifecycle [context-handoff]\n');
+  const created = await until(async () => (await workspace(app)).tasks[0], Boolean);
+  let previous = -1;
+  const answer = 'BETA';
+  {
+    const task = await pendingReview(app, created.id, 'question', previous);
+    const review = task.reviews.find(item => item.kind === 'question' && item.decision === null)!;
+    const draft = await draftFor(workspaceRoot, 'Choose ALPHA or BETA?');
+    expect((await loadRecords(localRoot)).records.find(item => draft.includes(item.basename))?.binding.taskRevision).toBe(task.revision);
+    const original = await readFile(draft, 'utf8');
+    await writeFile(draft, original.replace('action: answer\n\n', 'action: answer\n\npartial'));
+    await new Promise(done => setTimeout(done, 100));
+    expect((await workspace(app)).tasks.find(item => item.id === task.id)!.reviews.find(item => item.id === review.id)!.decision).toBeNull();
+    const current = (await workspace(app)).tasks.find(item => item.id === task.id)!;
+    const binding = (await loadRecords(localRoot)).records.find(item => draft.includes(item.basename))!.binding;
+    expect(matchesBinding(current, binding)).toBe(true);
+    await writeFile(draft, original.replace('action: answer\n\n', `action: answer\n\n${answer}`));
+    await new Promise(done => setTimeout(done, 100));
+    expect((await workspace(app)).tasks.find(item => item.id === task.id)!.reviews.find(item => item.id === review.id)!.decision).toBeNull();
+    await submit(workspaceRoot, draft, 'answer', answer);
+    const accepted = await until(async () => (await workspace(app)).tasks.find(item => item.id === task.id)!, item =>
+      item.reviews.find(entry => entry.id === review.id)?.decision === 'answer');
+    expect(accepted.reviews.find(item => item.id === review.id)?.answer).toBe(answer);
+    previous = accepted.revision;
+  }
+  let task = await pendingReview(app, created.id, 'workflow', previous);
+  const workflow = task.reviews.find(item => item.kind === 'workflow' && item.decision === null)!;
+  await submit(workspaceRoot, await draftFor(workspaceRoot, '## Workflow approval'), 'approve');
+  task = await pendingReview(app, created.id, 'artifact', task.revision);
+  expect(task.reviews.find(item => item.id === workflow.id)?.decision).toBe('approve');
+  const artifact = task.reviews.find(item => item.kind === 'artifact' && item.decision === null)!;
+  expect(artifact.artifacts).toHaveLength(1);
+  const material = artifact.artifacts[0];
+  const draft = await draftFor(workspaceRoot, '## Artifact approval');
+  const token = draft.match(/([0-9a-f-]{36})\.md$/)?.[1];
+  expect(token).toBeTruthy();
+  const materialPath = join(workspaceRoot, 'reviews', 'materials', token!, `${material.id}.v${material.version}.bin`);
+  expect(await readFile(materialPath, 'utf8')).toContain('Fixture evidence.');
+  expect(await readFile(draft, 'utf8')).toContain(material.digest);
+  await submit(workspaceRoot, draft, 'approve');
+  const done = await until(async () => (await workspace(app)).tasks.find(item => item.id === created.id)!, item => item.status === 'done');
+  expect(done.reviews.find(item => item.id === artifact.id)?.decision).toBe('approve');
+  expect(done.artifacts.some(item => item.digest === material.digest)).toBe(true);
+  expect(await readFile(materialPath, 'utf8')).toContain('Fixture evidence.');
+  const downloaded = await fetch(`${app.address}/api/tasks/${created.id}/artifacts/${material.id}?version=${material.version}`);
+  expect(downloaded.status).toBe(200);
+  expect(await downloaded.text()).toContain('Fixture evidence.');
+}, 15_000);
+
+it('rejects a separate task through a file and records its reason', async () => {
+  const { workspaceRoot, app } = await setup(true);
+  await mkdir(join(workspaceRoot, 'drafts'));
+  await writeFile(join(workspaceRoot, 'drafts', 'reject.md'), '# Reject this workflow\n');
+  const task = await until(async () => (await workspace(app)).tasks[0], item =>
+    Boolean(item?.reviews.some(review => review.kind === 'workflow' && review.decision === null)));
+  await submit(workspaceRoot, await draftFor(workspaceRoot, '## Workflow approval'), 'reject', 'Scope is wrong');
+  const rejected = await until(async () => (await workspace(app)).tasks.find(item => item.id === task.id)!, item => item.status === 'rejected');
+  expect(rejected.reviews.find(item => item.kind === 'workflow')?.decision).toBe('reject');
+  expect(rejected.reviews.find(item => item.kind === 'workflow')?.answer).toBe('Scope is wrong');
+});
 
 it('accepts a renamed workflow approval and continues to the next review', async () => {
   const { workspaceRoot, app } = await setup(true);

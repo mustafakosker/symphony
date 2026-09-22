@@ -385,4 +385,4 @@ Spec coverage: document binding/action restrictions (Task 1); exports, artifact 
 
 Implementation detail to preserve: an `applying` record must replay its exact command through the idempotent store before checking whether current task revision advanced. A stale precheck here would misreport an already accepted decision as Outdated after restart.
 
-Plan awaits user review. Preserve the user's previously selected subagent-driven execution method unless they change it. No application code is changed by this planning step.
+The user approved this plan and its subagent-driven execution method. Implementation and acceptance work have proceeded under that approval.

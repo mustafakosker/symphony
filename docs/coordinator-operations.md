@@ -56,7 +56,39 @@ Place free-form UTF-8 `.md` files in `drafts/` or use **New task** in the UI. In
 
 `active/<id>/` contains original `idea.md`, current `task.json`, immutable `events/`, workflow versions, reviews, `runs/` and versioned `artifacts/`. Terminal records move intact to `done/`, `rejected/`, or `cancelled/`. The state and current revision determine dispatch eligibility; folder location alone does not. The UI shows exact artifact versions and digests under review. A stale tab receives a revision conflict; retry using the freshly loaded record. Reusing a request ID with different payload is rejected.
 
-Only the UI submits human answers, approvals, changes, pause and cancellation. A pending decision stops the entire task while other tasks can use the free slot. Pause first writes a dispatch barrier, then stops the process tree. Cancellation does not roll back files, external actions or an already opened PR. If process termination is unconfirmed, the task remains blocked with its original pause/cancel intent and no end timestamp, including after restart. In **Confirm stop reconciliation**, record confirmation that the process tree has ended and reconcile checkout/provider effects. This settles cancellation into `cancelled`, or pause into a separate Continue review; it does not silently retry the stopped assignment. A confirmed process exit with uncertain external effects is recorded separately and requires effect reconciliation before retry. Read-only transient failures before side effects may retry twice, after roughly one and five seconds; exhausted or unsafe retries block. `done` means the approved workflow and completion checks passed, not that anything was merged or deployed unless explicitly included and verified.
+The UI accepts human answers, approvals, changes, pause and cancellation. A pending decision stops the entire task while other tasks can use the free slot. Pause first writes a dispatch barrier, then stops the process tree. Cancellation does not roll back files, external actions or an already opened PR. If process termination is unconfirmed, the task remains blocked with its original pause/cancel intent and no end timestamp, including after restart. In **Confirm stop reconciliation**, record confirmation that the process tree has ended and reconcile checkout/provider effects. This settles cancellation into `cancelled`, or pause into a separate Continue review; it does not silently retry the stopped assignment. A confirmed process exit with uncertain external effects is recorded separately and requires effect reconciliation before retry. Read-only transient failures before side effects may retry twice, after roughly one and five seconds; exhausted or unsafe retries block. `done` means the approved workflow and completion checks passed, not that anything was merged or deployed unless explicitly included and verified.
+
+## Synced file reviews
+
+On the designated host, set `"fileReviewsEnabled": true` in its settings to enable question answers and workflow/artifact decisions through Markdown. The [example settings](../config/examples/settings.json) leave it `false`. Keep `workspaceRoot` pointed at the OneDrive-synced task store and `localRoot` at a separate host-local directory. Stop and restart the designated host after changing the setting; `npm run start:local` starts this repository's local setup only. Do not delete `localRoot/file-reviews/` while submissions are in flight: it holds the request journal needed for safe recovery.
+
+For each pending review, open the generated file in `<workspaceRoot>/reviews/`. Edit only below `## Your response`. Save and close the editor, then rename the full filename from `name.md` to `name.ready.md`. Keep the `.md` extension exactly once; do not create `name.md.ready.md` or `name.ready.md.md`. Stop editing after the rename. Ordinary autosaves to `name.md` do not submit. A separate `name.receipt.md` confirms the response the coordinator actually processed; the submitted file alone is not confirmation. Examples of complete response sections are:
+
+```markdown
+## Your response
+action: answer
+
+We use Java 17.
+```
+
+```markdown
+## Your response
+action: approve
+
+```
+
+```markdown
+## Your response
+action: reject
+
+The proposed scope includes the wrong repository.
+```
+
+Use `answer` with nonempty text for a question. Questions cannot be rejected through file approval. For workflow or artifact review, use blank-body `approve` or `reject` with a reason. `reject` rejects the task; use the UI to request changes instead. The UI also remains available for answers and approvals, and is required for pause, cancellation, request-changes, and uncertain-run reconciliation.
+
+If a receipt says **Needs correction**, use the new draft the coordinator creates; the submitted filename cannot be reused. **Outdated** means another decision or a changed review won first, including a competing UI action; inspect the current task in the UI. Edits to the question, instructions, workflow scope, or reviewed-material header are rejected. If host-local review records are lost, old submitted files are left inert and an issue appears in the UI; restore the matching local journal or make the decision in the UI. The settling interval reduces partial-file reads but cannot prove OneDrive delivered edits in order. Check the receipt's processed response when sync is delayed or devices disagree.
+
+Phone editor and OneDrive behavior on the intended deployment is **unverified**. After deployment, manually check edit, save, close, rename, receipt visibility, and correction flow from the actual phone before treating synced review as ready for routine use. Local filesystem tests do not establish cloud sync compatibility.
 
 Read-only completed reports return `artifacts: []` and place each declared output's exact text in `completed.evidence[outputId]`. The coordinator publishes immutable versioned artifacts before accepting the result, bounded to the smaller of 1 MiB and `outputLimitBytes` in total report bytes. Missing declared report text or excessive bytes block acceptance. Checkpoint approvals bind the published versions/digests. Fresh assignments carry saved questions, checkpoints and answers with attempt/workflow identity and relevant accepted completion evidence; saved continuation context is capped at 1 MiB and excessive context blocks before spawning rather than silently discarding facts. Input artifacts and selected skills have a separate combined 1 MiB staging limit. Rejection and request-changes require visible nonempty feedback in the UI.
 

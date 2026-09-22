@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { parseCommand, parseWorkflow } from '../../shared/validate.js';
 import type { ArtifactRef, Command, Issue, Review, Task, Workflow } from '../../shared/contracts.js';
 
@@ -24,7 +25,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const digest = /^[0-9a-f]{64}$/i;
 const supported = (review: Review): review is Review & { kind: FileReviewKind } =>
   review.kind === 'question' || review.kind === 'workflow' || review.kind === 'artifact';
-const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+const equal = (left: unknown, right: unknown) => isDeepStrictEqual(left, right);
 
 function requiredObject(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${field} must be an object`);
