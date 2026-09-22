@@ -1,7 +1,9 @@
+import ReportArtifact from "./ReportArtifact";
+import {projectApi,type ProjectApi} from "../projects/api";
 import type { Task } from "../../shared/contracts";
 import { ArtifactPreview } from "./ArtifactPreview";
 
-export function TaskArtifacts({ task }: { task: Task }) {
+export function TaskArtifacts({ task, api=projectApi }: { task: Task; api?:ProjectApi }) {
   const seen = new Set<string>();
   const artifacts = task.artifacts.filter(artifact => {
     const identity = `${artifact.id}\0${artifact.version}`;
@@ -14,7 +16,7 @@ export function TaskArtifacts({ task }: { task: Task }) {
     <h3>Saved output</h3>
     {artifacts.length === 0
       ? <p>No saved output yet.</p>
-      : <ul>{artifacts.map(artifact => <ArtifactPreview key={`${task.id}:${artifact.id}:${artifact.version}`}
+      : <ul>{artifacts.map(artifact => task.schemaVersion===2 && task.runs.some(run=>run.result?.kind==="completed" && run.result.artifacts.some(a=>a.id===artifact.id&&a.version===artifact.version&&a.digest===artifact.digest)) ? <ReportArtifact key={`${task.id}:${artifact.id}:${artifact.version}`} taskId={task.id} artifact={artifact} api={api}/> : <ArtifactPreview key={`${task.id}:${artifact.id}:${artifact.version}`}
         taskId={task.id} artifact={artifact} />)}</ul>}
   </section>;
 }

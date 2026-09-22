@@ -62,7 +62,7 @@ export default function App({ api = workspaceApi, projects: providedProjects }: 
         {workspace.submissionId && <div className="notice-banner" role="status">Submitted; waiting for pickup</div>}
         {workspace.view?.issues.map(issue => <div key={issue.id} className="notice-banner" role="status">{issue.message}{issue.id.startsWith("intake-")&&<button className="underline ml-3" onClick={()=>dispatch({type:"screen",screen:"projects"})}>Review pending drafts</button>}</div>)}
       </div>
-      {navigation.screen === "settings" ? <ProjectSettings api={projects}/> : navigation.screen === "projects" ? <ProjectsPage api={projects} onOpenSettings={()=>dispatch({type:"screen",screen:"settings"})}/> : detail ? selectedTask ? <TaskDetail key={selectedTask.id} task={selectedTask} stale={!workspace.connected} onCommand={workspace.act} />
+      {navigation.screen === "settings" ? <ProjectSettings api={projects}/> : navigation.screen === "projects" ? <ProjectsPage api={projects} onOpenSettings={()=>dispatch({type:"screen",screen:"settings"})}/> : detail ? selectedTask ? <TaskDetail projects={projects} key={selectedTask.id} task={selectedTask} stale={!workspace.connected} onCommand={workspace.act} />
         : missing ? <section className="workspace-state"><Command size={28} /><h1>Task unavailable</h1><p>The selected task is no longer in the coordinator view. Return to the list to choose another task.</p></section>
         : loading ? <section className="workspace-state"><h1>Loading task…</h1></section>
         : <section className="workspace-state"><h1>Unable to load task</h1><p>Try again when the coordinator is available.</p></section>

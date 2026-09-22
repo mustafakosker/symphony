@@ -1,3 +1,5 @@
+import TaskProjectContext from "./TaskProjectContext";
+import {projectApi,type ProjectApi} from "../projects/api";
 import { useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import type { Command, Task } from "../../shared/contracts";
@@ -12,9 +14,9 @@ import ReviewPanel from "./ReviewPanel";
 import WorkflowJourney from "./WorkflowJourney";
 
 type Tab = "overview" | "activity" | "artifacts";
-type Props = { task: Task; stale: boolean; onBack?: () => void; backLabel?: string; onCommand: (command: Command) => Promise<void> };
+type Props = { projects?:ProjectApi; task: Task; stale: boolean; onBack?: () => void; backLabel?: string; onCommand: (command: Command) => Promise<void> };
 
-export default function TaskDetail({ task, stale, onCommand }: Props) {
+export default function TaskDetail({ projects=projectApi,task, stale, onCommand }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
   const pending = isClosed(task) ? [] : task.reviews.filter(review => review.decision === null);
   const lastResult = [...task.runs].reverse().find(run => run.result)?.result;
@@ -37,10 +39,11 @@ export default function TaskDetail({ task, stale, onCommand }: Props) {
           {task.blockedReason && <div className="closed-banner"><X size={17} /><div><strong>Blocked</strong><p>{task.blockedReason}</p></div></div>}
           {pending.map((review, index) => <ReviewPanel key={`${task.id}-${review.id}`} task={task} review={review} disabled={stale || index !== 0} onCommand={onCommand} />)}
           {isClosed(task) && <div className="closed-banner"><Check size={17} /><div><strong>Task {statusLabel(task).toLowerCase()}</strong><p>{task.status === "done" && lastResult?.kind === "completed" ? lastResult.summary : "The task record and partial output remain available for inspection."}</p></div></div>}
+          {task.schemaVersion===2&&<TaskProjectContext task={task} api={projects}/>}
           <WorkflowJourney task={task} disabled={stale} onCommand={onCommand} />
         </TabsContent></div>
         <div hidden={tab !== "activity"}><TabsContent value="activity" forceMount><TaskActivity task={task} /></TabsContent></div>
-        <div hidden={tab !== "artifacts"}><TabsContent value="artifacts" forceMount><TaskArtifacts task={task} /></TabsContent></div>
+        <div hidden={tab !== "artifacts"}><TabsContent value="artifacts" forceMount><TaskArtifacts task={task} api={projects} /></TabsContent></div>
       </Tabs>
     </div></div>
     <aside className="task-properties-rail" aria-label="Task properties"><TaskProperties task={task} /></aside>

@@ -653,3 +653,16 @@
 .draft-dialog [data-slot="textarea"] { min-height: 140px; resize: vertical; }
 .draft-dialog-footer { margin-top: 8px; color: var(--metadata); font-size: 12px; }
 @media (max-width: 520px) { .draft-dialog-footer { align-items: stretch; flex-direction: column; } }
+.task-project-context { margin: 24px 0; border: 1px solid var(--border); padding: 18px; border-radius: 10px; }
+.task-project-context h3 { font-weight: 600; margin-bottom: 14px; }
+.task-project-context details { padding: 12px 0; border-top: 1px solid var(--border); }
+.task-project-context summary { cursor: pointer; font-size: 13px; }
+.task-project-context p { font-size: 12px; margin: 12px 0; overflow-wrap: anywhere; color: var(--muted-foreground); }
+.source-report { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.8; margin: 12px 0; }
+.citation-button { display: inline-flex; height: 22px; padding: 0 6px; font-size: 11px; vertical-align: baseline; }
+.source-dialog { width: min(94vw, 980px); max-width: 980px !important; }
+.source-dialog [data-slot="dialog-description"] { overflow-wrap: anywhere; }
+.source-preview { max-height: 65vh; overflow: auto; font-size: 12px; line-height: 1.75; padding: 14px; background: var(--muted); border-radius: 8px; }
+.source-preview > span { display: block; min-width: max-content; }
+.source-preview [data-highlighted="true"] { background: color-mix(in srgb, var(--primary) 13%, transparent); }
+.source-line-number { display: inline-block; min-width: 40px; color: var(--muted-foreground); user-select: none; }
