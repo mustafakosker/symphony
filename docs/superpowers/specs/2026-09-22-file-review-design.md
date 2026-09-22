@@ -86,4 +86,4 @@ The file adapter owns request export, parsing, snapshots, and receipts. `applyHu
 
 ## Approval status
 
-The user approved renaming as the submission gesture. This written design is pending user review before implementation planning.
+The user approved both the rename submission gesture and this written design on 2026-09-22. Implementation planning is authorized; implementation follows review of the resulting plan.
