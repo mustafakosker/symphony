@@ -68,6 +68,33 @@ it('does not approve when reviewed material is missing', async () => {
   } finally { await f.dispose(); }
 });
 
+it('does not approve when reviewed material bytes are tampered', async () => {
+  const { createHash } = await import('node:crypto');
+  const { join } = await import('node:path');
+  const task = waitingTask();
+  task.proposedWorkflow = null;
+  task.workflow = (await import('../testing/fixtures.js')).workflowProposal();
+  const bytes = Buffer.from('reviewed material');
+  const ref = { id: 'findings', version: 1, digest: createHash('sha256').update(bytes).digest('hex'), path: 'artifacts/findings.1.bin' };
+  task.reviews = [{ id: 'artifact-review', kind: 'artifact', workflowVersion: 1, stepId: 'findings', artifacts: [ref],
+    prompt: 'Approve findings?', answer: null, decision: null }];
+  const f = await fileReviewFixture(task);
+  try {
+    await f.store.publishArtifact(task.id, 'findings', bytes);
+    await f.adapter.scan(0);
+    const { loadRecords } = await import('./io.js');
+    const record = (await loadRecords(f.localRoot)).records[0];
+    await writeFile(join(f.workspaceRoot, 'reviews', record.materials[0].filename), Buffer.from('tampered material'));
+    const ready = await submitFile(await draftFile(f.workspaceRoot), 'action: approve\n\n');
+    await f.adapter.scan(1); await f.adapter.scan(2);
+    const current = await f.store.get(task.id);
+    expect(current.revision).toBe(1);
+    expect(current.reviews[0].decision).toBeNull();
+    expect(await readFile(ready.replace('.ready.md', '.receipt.md'), 'utf8')).toContain('Reviewed artifact material is missing or changed');
+    expect((await loadRecords(f.localRoot)).records[0].outcome?.status).toBe('Needs correction');
+  } finally { await f.dispose(); }
+});
+
 it('resets the observation after a ready file disappears', async () => {
   const f = await fileReviewFixture();
   try {
