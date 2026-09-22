@@ -100,6 +100,19 @@ it("shows the approved step scope and completion conditions", async () => {
   expect(screen.getByText(/Completion checks: findings/)).toBeInTheDocument();
 });
 
+it("connects an expanded step trigger to its own details", async () => {
+  const task = waitingTask();
+  render(<WorkflowJourney task={task} disabled={false} onCommand={vi.fn()} />);
+  const trigger = screen.getByRole("button", { name: /Research/ });
+  await userEvent.click(trigger);
+  expect(trigger).toHaveAttribute("aria-expanded", "true");
+  const contentId = trigger.getAttribute("aria-controls");
+  expect(contentId).toBeTruthy();
+  const content = document.getElementById(contentId!);
+  expect(content).toBeInTheDocument();
+  expect(within(content!).getByText(/Role: researcher/)).toBeInTheDocument();
+});
+
 it('shows proposed revision scope over approved workflow history', () => {
   const task = waitingTask(); task.workflow = structuredClone(task.proposedWorkflow);
   task.proposedWorkflow!.version = 2;

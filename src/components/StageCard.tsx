@@ -64,7 +64,7 @@ export default function StageCard({ task, step, expanded, onToggle, disabled, on
         {review && <span className="review-tag">Your review</span>}
         <ChevronDown size={15} className={expanded ? "rotated" : ""} />
       </button></CollapsibleTrigger>
-      <CollapsibleContent className="stage-content" id={`content-${task.id}-${step.id}`}>
+      <CollapsibleContent className="stage-content">
           {step.kind === "agent" ? (
             <>
               <p className="stage-description">{step.instructions}</p>

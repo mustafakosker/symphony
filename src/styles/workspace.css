@@ -209,7 +209,6 @@
 .workspace-back-bar [data-slot="button"] { color: var(--muted-foreground); }
 .workspace-main .detail-panel { flex: 1; min-height: 0; background: var(--panel); }
 .workspace-main .detail-scroll { min-height: 0; }
-.workspace-main .detail-inner { max-width: 920px; padding: 30px 36px 40px; }
 .workspace-main .detail-title { font-size: 26px; font-weight: 500; }
 .workspace-state { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; color: var(--muted-foreground); }
 .workspace-state h1 { color: var(--foreground); font-size: 18px; font-weight: 500; }
@@ -217,7 +216,6 @@
 
 @media (max-width: 1150px) {
   .workspace-shell[data-slot="sidebar-wrapper"] { --sidebar-width: 184px !important; }
-  .workspace-main .detail-inner { padding: 26px; }
 }
 
 @media (max-width: 950px) {
@@ -229,7 +227,6 @@
   .workspace-menu-trigger { display: inline-flex; }
   .workspace-location-bar { gap: 8px; padding: 0 12px; }
   .workspace-location-name, .workspace-location-separator { display: none; }
-  .workspace-main .detail-inner { padding: 24px 20px 40px; }
   .workspace-main .detail-title { font-size: 24px; }
   .workspace-back-bar { padding: 8px 12px 0; }
 }
