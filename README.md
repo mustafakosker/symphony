@@ -18,13 +18,15 @@ After changing code, stop the server, run `npm run build`, then run `npm run sta
 
 The UI uses local Geist Sans 400/500 files imported in `src/main.tsx`, Radix-backed shadcn components in `src/components/ui/`, theme tokens in `src/styles/tokens.css`, and workspace/task layout rules in `src/styles/workspace.css` and `src/styles/task.css`.
 
-Use Node.js **22.12 or newer**. Install dependencies without upgrading them, copy the examples in `config/examples/`, and follow [coordinator operations](docs/coordinator-operations.md) to provision a designated host, local OneDrive sync root, separate work directory, roles, project aliases and verified read-only/mutating profiles. Then:
+Use Node.js **22.23.2**, the tested version pinned in `.nvmrc`. Node 20 is incompatible with the locked development dependencies; supported engine ranges are declared in `package.json`. If you use nvm, run `nvm install` and `nvm use` in this directory first. Install the committed dependency versions with `npm ci`, copy the examples in `config/examples/`, and follow [coordinator operations](docs/coordinator-operations.md) to provision a designated host, local OneDrive sync root, separate work directory, roles, project aliases and verified read-only/mutating profiles. Then:
 
 ```sh
-npm install
+npm ci
 npm run build
 SYMPHONY_CONFIG=/absolute/path/to/config.json npm run start
 ```
+
+On a managed laptop, a registry `403` naming JFrog Curation or an immature-package hold is separate from Node's `EBADENGINE` warnings and authentication errors. `npm ci` preserves the lockfile, but cannot make a blocked version available. Wait until the locked versions satisfy the registry's hold policy, request approval through the registry administrator, or use a tested lockfile containing policy-compliant versions. Keep the configured company registry and the committed lockfile; deleting the lockfile can select more recently published packages.
 
 The built server listens on `127.0.0.1:4317` by default. `npm run dev` serves the UI through Vite and proxies `/api` to port 4317; set `SYMPHONY_API_PORT` and `allowedOrigin` if using other development ports. Browser storage holds presentation choices only. Task records, approvals and attempts live in the configured workspace root. No real CLI assignment launches without a matching host-local `verifiedProfilesPath` capability attestation.
 
