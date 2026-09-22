@@ -257,3 +257,9 @@
 .project-operation { border-left: 2px solid var(--border); padding: 10px 14px; font-size: 13px; margin-top: 12px; }
 .project-report, .project-operation pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; max-height: 500px; overflow: auto; }
 @media (max-width: 760px) { .project-page { padding: 20px 16px; } .project-layout { grid-template-columns: 1fr; } .project-panel { padding: 18px; } }
+.project-selection { border-top: 1px solid var(--border); margin-top: 22px; padding-top: 14px; }
+.project-selection p { font-size: 12px; margin: 6px 0 12px; }
+.project-selection-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin: 8px 0; }
+.project-selection-row label { font-size: 11px; display: grid; gap: 5px; }
+.project-selection select { background: var(--background); border: 1px solid var(--border); border-radius: 5px; padding: 5px; font-size: 12px; }
+.draft-dialog { max-height: 90dvh; overflow-y: auto; }

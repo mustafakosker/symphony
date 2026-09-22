@@ -13,7 +13,8 @@ import { useWorkspace } from "./tasks/useWorkspace";
 
 const PREF_KEY = "symphony-workspace-preferences-v1";
 
-export default function App({ api = workspaceApi, projects = projectApi }: { api?: WorkspaceApi; projects?:ProjectApi }) {
+export default function App({ api = workspaceApi, projects: providedProjects }: { api?: WorkspaceApi; projects?:ProjectApi }) {
+  const projects=providedProjects??projectApi;
   const workspace = useWorkspace(api);
   const [navigation, dispatch] = useReducer(navigate, undefined, () => {
     try { return parsePreferences(localStorage.getItem(PREF_KEY)); }
@@ -59,7 +60,7 @@ export default function App({ api = workspaceApi, projects = projectApi }: { api
         </div>}
         {workspace.connected && workspace.error && <div className="notice-banner error" role="alert">{workspace.error}</div>}
         {workspace.submissionId && <div className="notice-banner" role="status">Submitted; waiting for pickup</div>}
-        {workspace.view?.issues.map(issue => <div key={issue.id} className="notice-banner" role="status">{issue.message}</div>)}
+        {workspace.view?.issues.map(issue => <div key={issue.id} className="notice-banner" role="status">{issue.message}{issue.id.startsWith("intake-")&&<button className="underline ml-3" onClick={()=>dispatch({type:"screen",screen:"projects"})}>Review pending drafts</button>}</div>)}
       </div>
       {navigation.screen === "settings" ? <ProjectSettings api={projects}/> : navigation.screen === "projects" ? <ProjectsPage api={projects} onOpenSettings={()=>dispatch({type:"screen",screen:"settings"})}/> : detail ? selectedTask ? <TaskDetail key={selectedTask.id} task={selectedTask} stale={!workspace.connected} onCommand={workspace.act} />
         : missing ? <section className="workspace-state"><Command size={28} /><h1>Task unavailable</h1><p>The selected task is no longer in the coordinator view. Return to the list to choose another task.</p></section>
@@ -71,7 +72,7 @@ export default function App({ api = workspaceApi, projects = projectApi }: { api
           onQuery={setQuery} onSelect={id => { dispatch({ type: "select", id }); setReturnFocusId(null); }}
           onNew={() => setCreating(true)} />}
     </WorkspaceShell>
-    <NewTaskDialog open={creating} onClose={() => setCreating(false)} canSubmit={workspace.connected}
-      onSubmit={async markdown => { await workspace.submit(markdown); setQuery(""); dispatch({ type: "submitted" }); setReturnFocusId(null); }} />
+    <NewTaskDialog projects={providedProjects ?? (api===workspaceApi?projectApi:undefined)} open={creating} onClose={() => setCreating(false)} canSubmit={workspace.connected}
+      onSubmit={async (markdown,projectDraft) => { await workspace.submit(markdown,projectDraft); setQuery(""); dispatch({ type: "submitted" }); setReturnFocusId(null); }} />
   </>;
 }
