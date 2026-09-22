@@ -9,7 +9,7 @@ export type SnapshotProfile={version:1;role:string;profile:string;executionProfi
  snapshotRoots:Array<{repository:string;root:string}>;coveredFiles:Array<{path:string;sha256:string}>;
  evidence:{provider:string;readMechanism:string;verifiedAt:string;checks:string[]}};
 const same=(a:string[],b:string[])=>a.length===b.length&&new Set(a).size===a.length&&new Set(b).size===b.length&&a.every(v=>b.includes(v));
-export async function verifySnapshotProfile(settings:Settings,assignment:Assignment,version:string):Promise<{sandbox:'read-only';cliProfile:string}>{
+export async function verifySnapshotProfile(settings:Settings,assignment:Pick<Assignment,'task'|'step'|'role'|'snapshotAccess'|'repositoryAccess'>,version:string):Promise<{sandbox:'read-only';cliProfile:string}>{
  if(assignment.task.schemaVersion!==2)throw new Error('Snapshot verification requires connected context');
  assertProjectStep(assignment.task,assignment.step);
  if(!same(assignment.role.actions,['read']))throw new Error('Connected assignments require an isolated read-only role');
