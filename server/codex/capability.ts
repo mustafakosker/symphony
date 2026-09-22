@@ -1,3 +1,4 @@
+import { verifySnapshotProfile } from './snapshot-capability.js';
 import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import { join, sep } from 'node:path';
@@ -29,6 +30,7 @@ const scopeKey = (item: { repository: string; localPath: string | null; mcpProfi
   JSON.stringify([item.repository, item.localPath, item.mcpProfile]);
 
 export async function verifyAssignmentProfile(settings: Settings, assignment: Assignment, version: string): Promise<{ sandbox: SandboxMode; cliProfile: string }> {
+  if (assignment.task.schemaVersion === 2) return verifySnapshotProfile(settings, assignment, version);
   if (new Set(assignment.role.actions).size !== assignment.role.actions.length ||
       new Set(assignment.step.actions).size !== assignment.step.actions.length)
     throw new Error('Duplicate capability actions');

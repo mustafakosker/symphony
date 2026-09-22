@@ -1,3 +1,4 @@
+import type { SnapshotAccess } from './snapshot-access.js';
 import type { AgentResult, AgentStep, Run, Task } from '../../shared/contracts.js';
 import type { Settings } from '../config/settings.js';
 import type { RoleConfig } from '../config/registry.js';
@@ -13,7 +14,7 @@ import { validateDeclaredArtifacts } from './artifacts.js';
 import { validateRepositoryAccess, type RepositoryAccess } from './repository-access.js';
 
 export type Assignment = { task: Task; step: AgentStep; run: Run; role: RoleConfig;
-  cwd: string; outputDir: string; schemaPath: string; repositoryAccess?: RepositoryAccess[];
+  cwd: string; outputDir: string; schemaPath: string; repositoryAccess?: RepositoryAccess[]; snapshotAccess?: SnapshotAccess[];
   materials: Array<{ kind: 'artifact' | 'skill'; name: string; text: string }> };
 export type Exit = { code: number | null; signal: string | null; result: AgentResult | null; error: string | null };
 export type Running = { pid: number; processStartedAt: string; completion: Promise<Exit>; stop(): Promise<void>;

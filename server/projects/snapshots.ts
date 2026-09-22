@@ -56,7 +56,7 @@ export async function openSnapshots(localRoot:string,limits:SnapshotLimits):Prom
  async function path(ref:SnapshotRef){
   if(!validId(ref.repositoryId)||!validId(ref.projectId)||!['sha1','sha256'].includes(ref.objectFormat)||
    !new RegExp(`^[a-f0-9]{${ref.objectFormat==='sha1'?40:64}}$`).test(ref.commit)||ref.snapshotId!==id(ref.repositoryId,ref.commit)||!/^[a-f0-9]{64}$/.test(ref.manifestDigest))throw new BoundaryError('invalid','Invalid snapshot identity');
-  return confinedPath(root,ref.snapshotId);
+  return confinedPath(root,`${ref.repositoryId}/${ref.snapshotId}`);
  }
  async function verify(ref:SnapshotRef):Promise<SnapshotManifest>{
   const directory=await path(ref),manifestPath=await confinedPath(directory,'manifest.json');
@@ -116,7 +116,7 @@ export async function openSnapshots(localRoot:string,limits:SnapshotLimits):Prom
     const ref:SnapshotRef={...base,manifestDigest:hash(bytes)},destination=await path(ref);
     try{await verify(ref);return ref;}catch{/* Rebuild only these retained committed bytes. */}
     await writeFile(join(temporary,'manifest.json'),bytes,{flag:'wx',mode:0o444});
-    await rm(destination,{recursive:true,force:true});await rename(temporary,destination);await verify(ref);return ref;
+    await mkdir(dirname(destination),{recursive:true});await rm(destination,{recursive:true,force:true});await rename(temporary,destination);await verify(ref);return ref;
    }finally{await rm(temporary,{recursive:true,force:true});}
   }),
   readText:async(ref,name)=>{

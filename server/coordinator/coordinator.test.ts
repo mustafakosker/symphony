@@ -725,3 +725,37 @@ it('bounds evidence-only report bytes before publishing any artifact', async () 
   expect(saved.artifacts).toHaveLength(0);
   expect(saved.runs[0].result).toBeNull();
 });
+
+it('dispatches connected investigations from pinned snapshots after the source is removed', async () => {
+ const { createProjectFixture, createRepository } = await import('../testing/projects.js');
+ const { scanRoot } = await import('../projects/discovery.js');
+ const { openProjectCatalog } = await import('../projects/catalog.js');
+ const { openSnapshots, resolveSourceCommit } = await import('../projects/snapshots.js');
+ const f = await createProjectFixture();
+ try {
+  await createRepository(f.root, 'shop', { 'README.md': 'Committed' });
+  const root = { projectsRoot: f.root, generation: 'g1', revision: 'r1', state: 'ready' as const, message: null };
+  const catalog = await openProjectCatalog(f.local), project = (await catalog.reconcile(root, await scanRoot(root, { timeoutMs: 5000 }))).records[0];
+  const snapshots = await openSnapshots(f.local, { entries: 100, totalBytes: 10000, fileBytes: 10000, timeoutMs: 5000 });
+  const resolved = await resolveSourceCommit(project, 'main'); await snapshots.importCommit(project, resolved);
+  const snapshot = await snapshots.materialize(project, resolved);
+  const task = { ...draftTask(), schemaVersion: 2 as const, purpose: 'project-brief' as const,
+   projectContext: { version: 1 as const, generation: 'g1', resolutionRevision: 'a'.repeat(64), targetId: null, referenceIds: [project.id],
+    projects: [{ projectId: project.id, repositoryId: project.id, name: 'shop', ref: 'main', snapshot, brief: null }] } };
+  task.status = 'queued'; task.currentStepId = 'research'; task.workflow = workflowProposal();
+  (task.workflow.steps[0] as import('../../shared/contracts.js').AgentStep).repositories = [project.id];
+  const store = await openStore(f.workspace), control = controlledRunner(); await store.create(task, 'create');
+  await rm(f.root, { recursive: true });
+  const coordinator = createCoordinator({ store, runner: control.runner, settings: { localRoot: f.local, workspaceRoot: f.workspace, concurrency: 1 } as Settings,
+   intake: { scan: async () => {}, issues: async () => [], submit: async () => ({ submissionId: 'unused' }) },
+   registry: { projects: [], roles: [{ role: 'researcher', instructions: 'Read', skills: [], cliProfile: 'researcher', actions: ['read'] }] } });
+  await coordinator.tick(new Date());
+  expect(control.starts).toHaveLength(1);
+  expect(control.starts[0].run.repos[0].commit).toBe(resolved.commit);
+  expect(control.starts[0].repositoryAccess).toEqual([]);
+  expect(control.starts[0].snapshotAccess?.[0].snapshotPath).toContain('/projects/snapshots/');
+  expect(control.starts[0].snapshotAccess?.[0].snapshotPath).not.toContain('/sources/');
+  control.finish(control.starts[0].run.id, { code: 1, signal: null, result: null, error: 'End fixture' });
+  await until(async () => (await store.get(task.id)).status === 'blocked'); await coordinator.shutdown();
+ } finally { await f.dispose(); }
+});

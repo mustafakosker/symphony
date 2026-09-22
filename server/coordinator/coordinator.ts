@@ -1,3 +1,6 @@
+import { openSnapshots } from '../projects/snapshots.js';
+import { resolveSnapshotAccess, snapshotLimits } from '../codex/snapshot-access.js';
+import { assertProjectStep } from '../domain/project-policy.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -269,13 +272,14 @@ export function createCoordinator({ store, intake, registry, runner, settings, r
       if (last?.nextRetryAt && now.getTime() < Date.parse(last.nextRetryAt)) return;
       if (last?.phase === 'running' || last?.phase === 'launch-intent' ||
           last?.phase === 'uncertain' && !last.reconciliationNote) return;
-      const repositories = selectedRepositories(current, step, registry);
+      assertProjectStep(current, step);
+      const repositories = current.schemaVersion === 2 ? [] : selectedRepositories(current, step, registry);
       const mcp = repositories.filter(repo => repo.localPath === null);
       const preparedRun = [...current.runs].reverse().find(run => run.stepId === `$resolve:${step.id}` &&
         run.phase === 'ended' && run.result?.kind === 'completed');
       const resolution = preparedRun?.result?.artifacts.find(ref => ref.id === 'repository-refs');
       const prepare = mcp.length > 0 && !resolution;
-      const actualStep = prepare ? resolutionStep(step, mcp) : step.id === '$triage'
+      const actualStep = current.schemaVersion === 2 ? { ...step, instructions: `${step.instructions}\nUse only the bound project context. Keep projectId null. Propose read-only investigation, design and implementation-plan outputs; preserve the future target/reference distinction.` } : prepare ? resolutionStep(step, mcp) : step.id === '$triage'
         ? { ...step, instructions: `${step.instructions}\n${registry.projects.length
           ? `Configured project choices: ${JSON.stringify(registry.projects.map(project => ({ id: project.id, names: project.names })))}. If the draft does not identify one project unambiguously, return needs_human with the choices; do not invent a project ID.`
           : 'No projects are configured. Use projectId: null and repositories: [] for all steps. Propose a repository-free workflow; do not ask the human to select a project. If the idea requires repository access, explain the missing access instead of inventing it.'}` }
@@ -286,7 +290,12 @@ export function createCoordinator({ store, intake, registry, runner, settings, r
       const refs = [...actualStep.inputs];
       if (resolution && !prepare) refs.push(resolution);
       const materials = await stagedMaterials(store, current.id, refs, role);
-      const repos: RepoRef[] = [];
+      const repos: RepoRef[] = current.schemaVersion === 2 ? step.repositories.map(id => {
+        const p = current.projectContext.projects.find(p => p.repositoryId === id)!;
+        return { repository: id, rule: p.ref, commit: p.snapshot.commit, selectedCommits: [p.snapshot.commit] };
+      }) : [];
+      const snapshotAccess = current.schemaVersion === 2
+        ? await resolveSnapshotAccess(current.projectContext, step.repositories, await openSnapshots(settings.localRoot, snapshotLimits(settings))) : undefined;
       for (const repo of prepare ? [] : repositories) if (repo.localPath) repos.push(await resolveLocalRef(repo, repo.defaultRef));
       if (resolution && !prepare) {
         const selected = validateRepoRefs(JSON.parse(Buffer.from(await store.readArtifact(current.id, resolution)).toString('utf8')), mcp);
@@ -318,7 +327,7 @@ export function createCoordinator({ store, intake, registry, runner, settings, r
         runtimeVersion: version, inputRefs: refs, repos, startedAt: now.toISOString(), endedAt: null,
         exitCode: null, retryCount: previousFailures(current, actualStep.id), nextRetryAt: null, result: null };
       const assignment: Assignment = { task: current, step: actualStep, run, role, cwd, outputDir,
-        schemaPath: join(outputDir, 'schema.json'), materials, repositoryAccess };
+        schemaPath: join(outputDir, 'schema.json'), materials, repositoryAccess, ...(snapshotAccess ? { snapshotAccess } : {}) };
       await store.publishRunFiles(current.id, runId, { 'input.json': json(assignment) });
       if (closing || slot.abandoned) return;
       slot.intentWriting = true;
