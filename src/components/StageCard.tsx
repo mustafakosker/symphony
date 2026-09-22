@@ -8,6 +8,8 @@ import {
 import type { AgentStep, HumanAction, HumanStep, Task } from "../../shared/contracts";
 import RunOutput from "./RunOutput";
 import { isClosed } from "../tasks/presentation";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Button } from "./ui/button";
 type Props = {
   task: Task;
   step: AgentStep | HumanStep;
@@ -33,15 +35,14 @@ export default function StageCard({ task, step, expanded, onToggle, disabled, on
         ? Code2
         : Sparkles;
   return (
-    <section
+    <Collapsible
+      open={expanded}
+      onOpenChange={onToggle}
       data-stage={step.id}
       className={`stage-card ${current ? "current" : ""} ${stale ? "stale" : ""} ${review ? "review-card" : ""} ${expanded ? "expanded" : ""}`}
     >
-      <button
+      <CollapsibleTrigger asChild><button
         className="stage-toggle"
-        aria-expanded={expanded}
-        aria-controls={`content-${task.id}-${step.id}`}
-        onClick={onToggle}
       >
         <span className={`stage-marker ${completed ? "complete" : ""}`}>
           {completed ? <Check size={15} /> : <Icon size={16} />}
@@ -62,9 +63,8 @@ export default function StageCard({ task, step, expanded, onToggle, disabled, on
         </span>
         {review && <span className="review-tag">Your review</span>}
         <ChevronDown size={15} className={expanded ? "rotated" : ""} />
-      </button>
-      {expanded && (
-        <div className="stage-content" id={`content-${task.id}-${step.id}`}>
+      </button></CollapsibleTrigger>
+      <CollapsibleContent className="stage-content" id={`content-${task.id}-${step.id}`}>
           {step.kind === "agent" ? (
             <>
               <p className="stage-description">{step.instructions}</p>
@@ -93,7 +93,7 @@ export default function StageCard({ task, step, expanded, onToggle, disabled, on
                   </div>
                 ))}
               {runs.at(-1) && <RunOutput taskId={task.id} runId={runs.at(-1)!.id} />}
-              {task.workflow && (task.status === "queued" || task.status === "running") && !task.intent && !task.reviews.some(item => item.decision === null) && !task.completedStepIds.includes(step.id) && runs.length === 0 && !review && (task.status !== "running" || task.currentStepId !== step.id) && <button className="button secondary" disabled={disabled} onClick={() => void onCommand({ kind: "insert-review", beforeStepId: step.id, title: `Review before ${step.title}` })}>Review before this step</button>}
+              {task.workflow && (task.status === "queued" || task.status === "running") && !task.intent && !task.reviews.some(item => item.decision === null) && !task.completedStepIds.includes(step.id) && runs.length === 0 && !review && (task.status !== "running" || task.currentStepId !== step.id) && <Button variant="outline" disabled={disabled} onClick={() => void onCommand({ kind: "insert-review", beforeStepId: step.id, title: `Review before ${step.title}` })}>Review before this step</Button>}
               {step.checks.length > 0 && (
                 <p className="muted">Checks: {step.checks.join(", ")}</p>
               )}
@@ -109,8 +109,7 @@ export default function StageCard({ task, step, expanded, onToggle, disabled, on
               </p>
             ))}
           {runs.flatMap(run => run.result?.artifacts ?? []).map(artifact => <a key={`run-${artifact.id}-${artifact.version}`} href={`/api/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(artifact.id)}?version=${artifact.version}`} download className="text-button">{artifact.id} · v{artifact.version}</a>)}
-        </div>
-      )}
-    </section>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -21,8 +21,10 @@ it("inserts review ahead of an upcoming agent step and exposes task controls", a
   await userEvent.click(screen.getByRole("button", { name: "Review before this step" }));
   expect(onCommand.mock.calls[0][0]).toMatchObject({ taskId: task.id, expectedRevision: task.revision,
     action: { kind: "insert-review", beforeStepId: "research" } });
-  expect(screen.getByRole("button", { name: "Pause for review" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Cancel task" })).toBeInTheDocument();
+  screen.getByRole("button", { name: "Task actions" }).focus();
+  await userEvent.keyboard("{Enter}");
+  expect(screen.getByRole("menuitem", { name: "Pause for review" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Cancel task" })).toBeInTheDocument();
 });
 
 it("hides checkpoint insertion while a decision or stop intent is pending", async () => {
@@ -50,11 +52,13 @@ it("marks stale steps, explains pause requested, and hides terminal actions", as
   const view = render(<WorkflowJourney task={task} disabled={false} onCommand={vi.fn()} />);
   expect(screen.getByText("Stale; rerun needed")).toBeInTheDocument();
   expect(screen.getByText(/Pause requested/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Cancel task" })).toBeInTheDocument();
+  screen.getByRole("button", { name: "Task actions" }).focus();
+  await userEvent.keyboard("{Enter}");
+  expect(screen.getByRole("menuitem", { name: "Cancel task" })).toBeInTheDocument();
   task.status = "done";
   task.intent = null;
   view.rerender(<WorkflowJourney task={task} disabled={false} onCommand={vi.fn()} />);
-  expect(screen.queryByRole("button", { name: "Cancel task" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Task actions" })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: /Research/ }));
   expect(screen.queryByRole("button", { name: "Review before this step" })).not.toBeInTheDocument();
 });
@@ -116,4 +120,11 @@ it('labels rejected revision proposals as saved history without suggesting pendi
   expect(screen.queryByText(/awaiting approval/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Approval applies to this proposal/)).not.toBeInTheDocument();
   expect(screen.getByText(/Proposed workflow v2 · saved history/)).toBeVisible();
+});
+
+it('never exposes task mutations for cancelled tasks with pending history', () => {
+  const task = { ...waitingTask(), status: 'cancelled' as const };
+  render(<WorkflowJourney task={task} disabled={false} onCommand={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Task actions' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Review before this step' })).not.toBeInTheDocument();
 });

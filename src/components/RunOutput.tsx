@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "./ui/button";
 export type RunOutputProps = { taskId: string; runId: string };
 type Chunk = { text: string; nextOffset: number; complete: boolean };
 const TAIL = 64 * 1024;
@@ -37,7 +38,7 @@ export default function RunOutput({ taskId, runId }: RunOutputProps) {
     return () => { active = false; window.clearTimeout(timer); };
   }, [taskId, runId, stream]);
   return <section className="terminal-block" aria-label="Run output">
-    <div><strong>Run output</strong><span className="log-streams"><button className={stream === "stdout" ? "selected" : ""} onClick={() => setStream("stdout")}>stdout</button><button className={stream === "stderr" ? "selected" : ""} onClick={() => setStream("stderr")}>stderr</button></span></div>
+    <div><strong>Run output</strong><span className="log-streams"><Button size="xs" variant={stream === "stdout" ? "secondary" : "ghost"} aria-pressed={stream === "stdout"} onClick={() => setStream("stdout")}>stdout</Button><Button size="xs" variant={stream === "stderr" ? "secondary" : "ghost"} aria-pressed={stream === "stderr"} onClick={() => setStream("stderr")}>stderr</Button></span></div>
     {error && <p role="alert" className="error">{error}</p>}
     <pre className="run-log" aria-live="polite">{output || (complete ? "No output recorded." : "Waiting for output…")}</pre>
   </section>;

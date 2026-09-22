@@ -195,7 +195,9 @@ it("does not expose demo execution actions", async () => {
       name: /Complete demo|Reset demo|Approve plan/i,
     }),
   ).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Cancel task" })).toBeInTheDocument();
+  screen.getByRole("button", { name: "Task actions" }).focus();
+  await userEvent.keyboard("{Enter}");
+  expect(screen.getByRole("menuitem", { name: "Cancel task" })).toBeInTheDocument();
 });
 
 it("shows an unavailable selected record without choosing a different task", async () => {
@@ -229,6 +231,7 @@ it("keeps the last known detail on disconnect and disables draft submission", as
   );
   render(<App api={boundary} />);
   await openDraft();
+  await user.click(screen.getByRole("button", { name: "Request changes" }));
   await user.type(screen.getByRole("textbox", { name: "Feedback" }), "Unsent review note");
   // A newly mounted client can encounter a disconnect on its next coordinator fetch.
   const original = boundary.load;
@@ -246,7 +249,8 @@ it("keeps the last known detail on disconnect and disables draft submission", as
   expect(screen.getByRole("textbox", { name: "Feedback" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Request changes" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Reject task" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Send feedback" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "More review actions" })).toBeDisabled();
   await user.click(screen.getByRole("button", { name: "Back to all tasks" }));
   expect(screen.getByRole("button", { name: "New task" })).toBeDisabled();
 });
@@ -443,7 +447,9 @@ it("routes cancellation through the coordinator and keeps partial output links",
   vi.mocked(boundary.command).mockImplementation(async () => { persisted = cancelled; return cancelled; });
   render(<App api={boundary} />);
   await openDraft();
-  await user.click(screen.getByRole("button", { name: "Cancel task" }));
+  screen.getByRole("button", { name: "Task actions" }).focus();
+  await user.keyboard("{Enter}");
+  await user.click(screen.getByRole("menuitem", { name: "Cancel task" }));
   expect(boundary.command).toHaveBeenCalledWith(expect.objectContaining({ taskId: current.id, expectedRevision: 1, action: { kind: "cancel" } }));
   expect(await screen.findByRole("link", { name: "notes · v2" })).toHaveAttribute("href", `/api/tasks/${current.id}/artifacts/notes?version=2`);
 });

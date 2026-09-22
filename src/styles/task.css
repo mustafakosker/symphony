@@ -1,0 +1,376 @@
+.detail-panel .task-review {
+  min-width: 0;
+  margin: 24px 0;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.detail-panel .workflow-proposal {
+  min-width: 0;
+  margin: 22px 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.detail-panel .workflow-proposal h3 {
+  margin: 0 0 10px;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.detail-panel .workflow-proposal ol {
+  padding-left: 20px;
+}
+
+.detail-panel .workflow-proposal li + li {
+  margin-top: 12px;
+}
+
+.detail-panel .workflow-proposal li p {
+  margin: 3px 0;
+  white-space: pre-wrap;
+}
+
+.detail-panel .task-review .section-caption h3 {
+  margin: 0 0 8px;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.detail-panel .task-review > p,
+.detail-panel .review-proposal,
+.detail-panel .review-artifacts {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.detail-panel .task-review .review-prompt {
+  margin: 0 0 12px;
+  color: var(--foreground) !important;
+  font-size: 14px !important;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.detail-panel .review-proposal {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  overflow-wrap: anywhere;
+}
+
+.detail-panel .review-proposal h4 {
+  margin: 0 0 10px;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.detail-panel .review-proposal ol {
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.detail-panel .review-proposal li + li {
+  margin-top: 12px;
+}
+
+.detail-panel .review-proposal p,
+.detail-panel .stage-description {
+  white-space: pre-wrap;
+}
+
+.detail-panel .review-proposal li p {
+  margin: 3px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.detail-panel .review-artifacts {
+  margin-top: 18px;
+}
+
+.detail-panel .review-artifacts > strong {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.detail-panel .review-artifacts li {
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.detail-panel .review-artifacts li + li {
+  margin-top: 7px;
+}
+
+.detail-panel .task-review .review-label,
+.detail-panel .closed-banner .review-label {
+  display: block;
+  margin: 14px 0 10px;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.detail-panel .review-label [data-slot="textarea"] {
+  min-height: 80px;
+  margin-top: 7px;
+  padding: 9px 10px;
+  border-color: var(--input);
+  background: var(--panel);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.detail-panel .task-review .review-actions,
+.detail-panel .review-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.detail-panel .task-review .review-actions [aria-label="More review actions"] {
+  margin-left: auto;
+}
+
+.detail-panel .task-review .review-consequence {
+  margin: 13px 0 0;
+  color: var(--metadata);
+  font-size: 12px;
+}
+
+.detail-panel .review-feedback-form {
+  margin-top: 14px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.detail-panel .review-feedback-form .review-form-actions {
+  margin-top: 11px;
+}
+
+.detail-panel .journey-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 27px 0 12px;
+}
+
+.detail-panel .journey-heading > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.detail-panel .journey-heading h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.detail-panel .journey-heading p,
+.detail-panel .journey-heading > span {
+  margin: 4px 0 0;
+  color: var(--metadata);
+  font-size: 12px;
+}
+
+.detail-panel .journey-heading [aria-label="Task actions"] {
+  flex: none;
+}
+
+.detail-panel .journey {
+  gap: 0;
+  margin-top: 15px;
+}
+
+.detail-panel .stage-card {
+  position: relative;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.detail-panel .stage-card:not(:last-child)::after {
+  left: 9px;
+  top: 24px;
+  bottom: 0;
+  height: auto;
+  width: 1px;
+  background: var(--border);
+}
+
+.detail-panel .stage-toggle {
+  min-width: 0;
+  min-height: 57px;
+  padding: 9px 4px 9px 0;
+  gap: 12px;
+  border-radius: 5px;
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+.detail-panel .stage-toggle:hover {
+  background: var(--panel);
+}
+
+.detail-panel .stage-toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.detail-panel .stage-marker {
+  z-index: 1;
+  width: 19px;
+  height: 19px;
+  border: 1px solid var(--metadata);
+  border-radius: 50%;
+  background: var(--background);
+  color: var(--muted-foreground);
+}
+
+.detail-panel .stage-marker svg {
+  width: 12px;
+  height: 12px;
+}
+
+.detail-panel .stage-marker.complete {
+  border-color: #79d9aa;
+  background: #79d9aa18;
+  color: #79d9aa;
+}
+
+.detail-panel .stage-card.current .stage-marker,
+.detail-panel .stage-card.review-card .stage-marker {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--background);
+}
+
+.detail-panel .stage-label strong {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.detail-panel .stage-label > span {
+  margin-top: 5px;
+  color: var(--metadata);
+  font-size: 12px;
+}
+
+.detail-panel .review-tag {
+  color: var(--primary);
+  background: #a89be818;
+  border-color: #a89be831;
+  font-size: 12px;
+}
+
+.detail-panel .stage-content {
+  min-width: 0;
+  padding: 0 8px 20px 31px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.detail-panel .stage-description {
+  margin: 0 0 12px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.detail-panel .stage-content .muted p {
+  margin: 4px 0;
+}
+
+.detail-panel .agent-note,
+.detail-panel .feedback-note {
+  margin: 14px 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.detail-panel .terminal-block {
+  min-width: 0;
+  margin: 13px 0;
+  border-color: var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--foreground);
+}
+
+.detail-panel .terminal-block > div {
+  min-height: 42px;
+  padding: 8px 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.detail-panel .log-streams {
+  margin-left: auto;
+  gap: 4px;
+  letter-spacing: normal;
+}
+
+.detail-panel .terminal-block pre,
+.detail-panel .run-log {
+  max-height: 260px;
+  padding: 12px;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+}
+
+.detail-panel .progress-track span {
+  background: var(--border);
+}
+
+.detail-panel .progress-track .complete {
+  background: #79d9aa;
+}
+
+.detail-panel .progress-track .current {
+  background: var(--primary);
+}
+
+@media (max-width: 649px) {
+  .detail-panel .task-review { padding: 18px; }
+  .detail-panel .journey-heading { flex-wrap: wrap; }
+  .detail-panel .journey-heading > span { margin-left: auto; }
+  .detail-panel .journey-heading [aria-label="Task actions"] { margin-left: auto; }
+  .detail-panel .stage-toggle { gap: 9px; }
+  .detail-panel .review-tag { display: none; }
+}
