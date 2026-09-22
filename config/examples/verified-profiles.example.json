@@ -1,0 +1,20 @@
+{
+  "profiles": [
+    {
+      "role": "researcher",
+      "profile": "example-read-only",
+      "cliVersion": "EDIT-ME-installed-version-without-codex-cli-prefix",
+      "sandbox": "read-only",
+      "actions": ["read"],
+      "environmentKeys": [],
+      "repositories": [],
+      "coveredFiles": [
+        { "path": "/EDIT-ME/codex-home/config.toml", "sha256": "EDIT-ME-64-lowercase-hex" },
+        { "path": "/EDIT-ME/codex-home/example-read-only.config.toml", "sha256": "EDIT-ME-64-lowercase-hex" },
+        { "path": "/EDIT-ME/example-synced-workspace/roles/roles.json", "sha256": "EDIT-ME-64-lowercase-hex" },
+        { "path": "/EDIT-ME/example-synced-workspace/projects/projects.json", "sha256": "EDIT-ME-64-lowercase-hex" }
+      ],
+      "checks": ["task-store-write-denied", "repository-write-denied", "merge-deploy-tool-denied"]
+    }
+  ]
+}

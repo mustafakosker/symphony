@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-server/
+.symphony-local/
+*.tsbuildinfo
+.playwright/
+.superpowers/

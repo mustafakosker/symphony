@@ -1,0 +1,39 @@
+{
+  "roles": [
+    {
+      "role": "triage",
+      "instructions": "Classify the idea and propose a workflow; request clarification when project selection is ambiguous.",
+      "skills": [],
+      "cliProfile": "example-read-only",
+      "actions": ["read"]
+    },
+    {
+      "role": "researcher",
+      "instructions": "Gather evidence from the approved repository revisions and cite it in the handoff.",
+      "skills": [],
+      "cliProfile": "example-read-only",
+      "actions": ["read"]
+    },
+    {
+      "role": "prd-writer",
+      "instructions": "Draft requirements from the approved evidence and capture open questions.",
+      "skills": [],
+      "cliProfile": "example-read-only",
+      "actions": ["read"]
+    },
+    {
+      "role": "implementer",
+      "instructions": "Make approved changes only in the assigned host-local worktree.",
+      "skills": [],
+      "cliProfile": "example-local-write",
+      "actions": ["read", "write-local"]
+    },
+    {
+      "role": "reviewer",
+      "instructions": "Review requirements and change evidence in a separate context.",
+      "skills": [],
+      "cliProfile": "example-read-only",
+      "actions": ["read"]
+    }
+  ]
+}

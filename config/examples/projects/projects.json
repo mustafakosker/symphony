@@ -1,0 +1,24 @@
+{
+  "projects": [
+    {
+      "id": "example-sales",
+      "names": ["Example Digital Sales Workspace", "Example Sales"],
+      "repositories": [
+        {
+          "id": "example-web",
+          "localPath": "/EDIT-ME/example-local-repository",
+          "mcpProfile": null,
+          "baseRef": "main",
+          "defaultRef": "latest-tag"
+        },
+        {
+          "id": "example-research",
+          "localPath": null,
+          "mcpProfile": "example-research-read-only",
+          "baseRef": "main",
+          "defaultRef": "main"
+        }
+      ]
+    }
+  ]
+}

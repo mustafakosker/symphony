@@ -1,0 +1,15 @@
+{
+  "workspaceRoot": "/EDIT-ME/example-synced-workspace",
+  "localRoot": "/EDIT-ME/example-host-local-work",
+  "codexBinary": "/EDIT-ME/bin/codex",
+  "port": 4317,
+  "concurrency": 1,
+  "scanMs": 2000,
+  "stableMs": 2000,
+  "runTimeoutMs": 1800000,
+  "stopGraceMs": 5000,
+  "outputLimitBytes": 10485760,
+  "allowedOrigin": "http://127.0.0.1:4317",
+  "environmentKeys": [],
+  "verifiedProfilesPath": "/EDIT-ME/example-host-local-work/verified-profiles.json"
+}
