@@ -29,7 +29,7 @@ async function setup(mode: string, overrides: Partial<Settings> = {}) {
   const settings: Settings = { workspaceRoot: join(root, 'synced'), localRoot: root,
     codexBinary: process.execPath, port: 4317, concurrency: 1, scanMs: 2000, stableMs: 2000,
     runTimeoutMs: 300, stopGraceMs: 100, outputLimitBytes: 2000,
-    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [], verifiedProfilesPath: null, ...overrides };
+    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [], verifiedProfilesPath: null, fileReviewsEnabled: false, ...overrides };
   await writeFile(join(cwd, 'scenario.json'), JSON.stringify({ mode, taskId: task.id, attemptId: run.id }));
   return { root, cwd, outputDir, assignment, settings,
     runner: createCodexRunner(settings, { executable: process.execPath, prefixArgs: [fake] }) };

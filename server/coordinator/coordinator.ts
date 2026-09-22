@@ -17,7 +17,7 @@ import { recoverAttempts } from './recovery.js';
 export type Coordinator = { tick(now: Date): Promise<void>; stopTask(taskId: string, expectedAttemptId?: string): Promise<void>; shutdown(): Promise<void>;
   readLiveLog?(taskId: string, runId: string, offset: number, maxBytes: number, stream: LogStream): Promise<LogPage | null> };
 type Deps = { store: Store; intake: Intake; registry: Registry; runner: Runner; settings: Settings;
-  recovered?: boolean };
+  recovered?: boolean; beforeDispatch?: (now: Date) => Promise<void> };
 type Slot = { taskId: string; runId: string | null; running: Running | null;
   assignment: Assignment | null; accepted: Promise<void> | null; settling: boolean; abandoned: boolean;
   uncertainty: Promise<void> | null; starting: boolean; intentWriting: boolean };
@@ -108,7 +108,7 @@ function previousFailures(task: Task, stepId: string): number {
   return count;
 }
 
-export function createCoordinator({ store, intake, registry, runner, settings, recovered = false }: Deps): Coordinator {
+export function createCoordinator({ store, intake, registry, runner, settings, recovered = false, beforeDispatch }: Deps): Coordinator {
   const slots = new Map<string, Slot>();
   let started = recovered;
   let ticking: Promise<void> | null = null;
@@ -377,6 +377,8 @@ export function createCoordinator({ store, intake, registry, runner, settings, r
       if (issues.some(issue => issue.id.startsWith('recovery-') && issue.message.includes('could not be persisted'))) return;
     }
     await intake.scan(now.getTime());
+    if (closing) return;
+    await beforeDispatch?.(now);
     if (operationalErrors.length) throw new Error(`Coordinator operational failure: ${errorText(operationalErrors[0])}`);
     const view = await store.list();
     if (view.coordinator === 'degraded') return;

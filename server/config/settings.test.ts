@@ -15,7 +15,22 @@ it('applies safe defaults to disjoint roots and an executable CLI', async () => 
   const settings = await loadSettings(path);
   expect(settings).toMatchObject({ port: 4317, concurrency: 1, scanMs: 2000, stableMs: 2000,
     runTimeoutMs: 1_800_000, stopGraceMs: 5000, outputLimitBytes: 10_485_760,
-    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [] });
+    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [], fileReviewsEnabled: false });
+});
+
+it('accepts only an explicit boolean file review opt-in', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'symphony-settings-')); roots.push(root);
+  const workspaceRoot = join(root, 'synced'); const localRoot = join(root, 'local'); const codexBinary = join(root, 'codex');
+  await mkdir(workspaceRoot); await mkdir(localRoot); await writeFile(codexBinary, '#!/bin/sh\n'); await chmod(codexBinary, 0o755);
+  const path = join(root, 'settings.json');
+  for (const enabled of [false, true]) {
+    await writeFile(path, JSON.stringify({ workspaceRoot, localRoot, codexBinary, fileReviewsEnabled: enabled }));
+    expect((await loadSettings(path)).fileReviewsEnabled).toBe(enabled);
+  }
+  for (const fileReviewsEnabled of ['true', 1, null, [], {}]) {
+    await writeFile(path, JSON.stringify({ workspaceRoot, localRoot, codexBinary, fileReviewsEnabled }));
+    await expect(loadSettings(path)).rejects.toThrow(/fileReviewsEnabled/);
+  }
 });
 
 it('rejects nested roots and missing binary', async () => {

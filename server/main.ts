@@ -7,6 +7,8 @@ import { verifyConfiguredProfiles } from './codex/capability.js';
 import { loadRegistry, type RoleConfig } from './config/registry.js';
 import { loadSettings, type Settings } from './config/settings.js';
 import { createCoordinator } from './coordinator/coordinator.js';
+import { applyHumanCommand } from './coordinator/reviews.js';
+import { createFileReviews, type FileReviewAdapter } from './file-reviews/adapter.js';
 import { recoverAttempts } from './coordinator/recovery.js';
 import { createApi } from './http/api.js';
 import { createStaticHandler } from './http/static.js';
@@ -42,11 +44,19 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     const { version } = await runner.probe();
     await (options.verifyCapabilities ?? verifyConfiguredProfiles)(settings, registry.roles, version);
     const intake = createIntake(settings.workspaceRoot, store, settings.stableMs);
-    coordinator = createCoordinator({ store, intake, registry, runner, settings, recovered: true });
+    let fileReviews: FileReviewAdapter | undefined;
+    coordinator = createCoordinator({ store, intake, registry, runner, settings, recovered: true,
+      beforeDispatch: async now => { await fileReviews?.scan(now.getTime()); } });
+    const activeCoordinator = coordinator;
+    if (settings.fileReviewsEnabled) {
+      fileReviews = createFileReviews({ store, workspaceRoot: settings.workspaceRoot,
+        localRoot: settings.localRoot, stableMs: settings.stableMs,
+        apply: command => applyHumanCommand(store, activeCoordinator, command) });
+    }
     const ui = createStaticHandler(options.buildDir ?? defaultBuildDir);
     const api = createApi({ store, intake, coordinator, allowedOrigin: settings.allowedOrigin,
       runtimeVersion: () => version, health: () => degraded ? 'degraded' : 'ready',
-      issues: async () => startupIssues });
+      issues: async () => [...startupIssues, ...(await fileReviews?.issues() ?? [])] });
     server = createServer((request, response) => {
       if ((request.url ?? '').startsWith('/api/')) api(request, response);
       else ui(request, response);

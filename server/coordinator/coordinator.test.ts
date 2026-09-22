@@ -48,6 +48,29 @@ it('never dispatches a waiting task and does not await another run in tick', asy
   expect(control.starts).toHaveLength(1);
 });
 
+it('runs the pre-dispatch hook before reading eligible tasks', async () => {
+  const { store, control, registry, settings, intake } = await setup();
+  registry.roles.push({ role: 'researcher', instructions: 'Research', skills: [], cliProfile: 'researcher', actions: ['read'] });
+  const waiting = await store.create(waitingTask(), 'waiting');
+  const coordinator = createCoordinator({ store, intake, registry, runner: control.runner, settings,
+    beforeDispatch: async () => {
+      const current = await store.get(waiting.id);
+      await applyHumanCommand(store, coordinator, { taskId: waiting.id, expectedRevision: current.revision,
+        requestId: 'hook-approval', action: { kind: 'approve', reviewId: current.reviews[0].id, artifactDigests: [] } });
+    } });
+  await coordinator.tick(new Date('2026-09-21T12:00:00Z'));
+  expect(control.starts.map(start => start.task.id)).toContain(waiting.id);
+});
+
+it('rejects a failed pre-dispatch hook without launching agents', async () => {
+  const { store, control, registry, settings, intake } = await setup();
+  await store.create(draftTask(), 'draft');
+  const coordinator = createCoordinator({ store, intake, registry, runner: control.runner, settings,
+    beforeDispatch: async () => { throw new Error('journal unavailable'); } });
+  await expect(coordinator.tick(new Date())).rejects.toThrow('journal unavailable');
+  expect(control.starts).toHaveLength(0);
+});
+
 it('does not stop an active assignment with a different attempt ID', async () => {
   const { store, control, coordinator } = await setup();
   const task = await store.create(draftTask(), 'create');

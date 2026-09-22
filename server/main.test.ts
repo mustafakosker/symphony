@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
 import type { Runner } from './codex/adapter.js';
 import { createCodexRunner } from './codex/adapter.js';
 import { loadSettings } from './config/settings.js';
@@ -12,6 +13,14 @@ import { startApplication } from './main.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+async function unusedPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No ephemeral port');
+  await new Promise<void>(done => server.close(() => done()));
+  return address.port;
+}
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'symphony-main-')); roots.push(root);
   const workspaceRoot = join(root, 'workspace'); const localRoot = join(root, 'local');
@@ -21,8 +30,9 @@ async function setup() {
   await writeFile(join(workspaceRoot, 'projects/projects.json'), '{"projects":[]}');
   await writeFile(join(workspaceRoot, 'roles/roles.json'), '{"roles":[]}');
   const configPath = join(root, 'symphony.config.json');
+  const port = await unusedPort();
   await writeFile(configPath, JSON.stringify({ workspaceRoot, localRoot, codexBinary: process.execPath,
-    port: 4317, scanMs: 50, stableMs: 1, stopGraceMs: 20, allowedOrigin: 'http://127.0.0.1:4317' }));
+    port, scanMs: 50, stableMs: 1, stopGraceMs: 20, allowedOrigin: `http://127.0.0.1:${port}` }));
   const buildDir = join(root, 'dist'); await mkdir(join(buildDir, 'assets'), { recursive: true });
   await writeFile(join(buildDir, 'index.html'), '<h1>Ready</h1>');
   const settings = await loadSettings(configPath);
