@@ -211,7 +211,8 @@ it('recovers an exited fake CLI whose final output was written before acceptance
     expect(held?.taskId).toBe(proposed.id);
     const finalPath = join(localRoot, 'tasks', proposed.id, 'runs', held!.runId, `${held!.runId}.final.json`);
     expect(JSON.parse(await readFile(finalPath, 'utf8')).kind).toBe('completed');
-    const before = JSON.parse(await readFile(join(workspaceRoot, 'active', proposed.id, 'task.json'), 'utf8')) as Task;
+    const before = await until(async () => JSON.parse(await readFile(join(workspaceRoot, 'active', proposed.id, 'task.json'), 'utf8')) as Task,
+      task => task.runs.some(run => run.id === held!.runId && run.phase === 'running'), 'persisted running state');
     expect(before.runs.find(run => run.id === held!.runId)?.phase).toBe('running');
     expect(before.runs.find(run => run.id === held!.runId)?.result).toBeNull();
     expect(await readFile(join(localRoot, 'tasks', proposed.id, 'research-count.txt'), 'utf8')).toBe('1');
