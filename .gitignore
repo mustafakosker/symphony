@@ -5,4 +5,5 @@ dist-server/
 *.tsbuildinfo
 .playwright/
 .superpowers/
+.worktrees/
 symphony.config.json
