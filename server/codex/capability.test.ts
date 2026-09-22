@@ -38,7 +38,7 @@ async function setup() {
   const settings: Settings = { workspaceRoot, localRoot: await realpath(root),
     codexBinary: process.execPath, port: 4317, concurrency: 1, scanMs: 2000, stableMs: 2000,
     runTimeoutMs: 1000, stopGraceMs: 100, outputLimitBytes: 1000,
-    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [], verifiedProfilesPath: manifestPath, fileReviewsEnabled: false };
+    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [], verifiedProfilesPath: manifestPath, fileReviewsEnabled: false, phoneDraftsEnabled: false };
   const task = draftTask();
   const assignment: Assignment = { task, cwd: root, outputDir: root, schemaPath: join(root, 'schema.json'), materials: [],
     step: { kind: 'agent', id: 'research', title: 'Research', role: 'researcher', instructions: '',

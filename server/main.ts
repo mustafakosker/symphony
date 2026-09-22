@@ -43,7 +43,8 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     const runner = options.runner ?? createCodexRunner(settings);
     const { version } = await runner.probe();
     await (options.verifyCapabilities ?? verifyConfiguredProfiles)(settings, registry.roles, version);
-    const intake = createIntake(settings.workspaceRoot, store, settings.stableMs);
+    const intake = createIntake(settings.workspaceRoot, store, settings.stableMs, {},
+      { phoneDraftsEnabled: settings.phoneDraftsEnabled });
     let fileReviews: FileReviewAdapter | undefined;
     coordinator = createCoordinator({ store, intake, registry, runner, settings, recovered: true,
       beforeDispatch: async now => { await fileReviews?.scan(now.getTime()); } });

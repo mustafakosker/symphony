@@ -23,6 +23,7 @@ The built-in HTTP boundary is suitable for local host access. Company-network us
 | `concurrency` | `1` | Maximum concurrent assignments globally; one per task. |
 | `scanMs` | `2000` | Intake and scheduler polling interval in milliseconds. |
 | `stableMs` | `2000` | Minimum matching draft observation interval. |
+| `phoneDraftsEnabled` | `false` | Provide numbered phone drafts submitted by renaming to `.ready.md`. |
 | `runTimeoutMs` | `1800000` | Assignment time limit in milliseconds. |
 | `stopGraceMs` | `5000` | Grace before process-tree escalation. |
 | `outputLimitBytes` | `10485760` | Captured output limit per run. |
@@ -57,6 +58,23 @@ Place free-form UTF-8 `.md` files in `drafts/` or use **New task** in the UI. In
 `active/<id>/` contains original `idea.md`, current `task.json`, immutable `events/`, workflow versions, reviews, `runs/` and versioned `artifacts/`. Terminal records move intact to `done/`, `rejected/`, or `cancelled/`. The state and current revision determine dispatch eligibility; folder location alone does not. The UI shows exact artifact versions and digests under review. A stale tab receives a revision conflict; retry using the freshly loaded record. Reusing a request ID with different payload is rejected.
 
 The UI accepts human answers, approvals, changes, pause and cancellation. A pending decision stops the entire task while other tasks can use the free slot. Pause first writes a dispatch barrier, then stops the process tree. Cancellation does not roll back files, external actions or an already opened PR. If process termination is unconfirmed, the task remains blocked with its original pause/cancel intent and no end timestamp, including after restart. In **Confirm stop reconciliation**, record confirmation that the process tree has ended and reconcile checkout/provider effects. This settles cancellation into `cancelled`, or pause into a separate Continue review; it does not silently retry the stopped assignment. A confirmed process exit with uncertain external effects is recorded separately and requires effect reconciliation before retry. Read-only transient failures before side effects may retry twice, after roughly one and five seconds; exhausted or unsafe retries block. `done` means the approved workflow and completion checks passed, not that anything was merged or deployed unless explicitly included and verified.
+
+## Phone idea drafts
+
+Set `"phoneDraftsEnabled": true` in the designated host's settings, rebuild after updating the code, and restart Symphony. The host must be running and `workspaceRoot` must be the OneDrive-synced workspace accessible from your phone. The repository's local settings enable the feature, but their workspace is local, not a OneDrive folder.
+
+1. Open `drafts/phone/New idea-001.md` on your phone. Symphony creates this blank file for you.
+2. Write your idea as plain text or Markdown. Autosave does not submit it.
+3. Wait for saving/syncing to finish, close the editor, then rename the file to `New idea-001.ready.md`. Keep the number and insert `.ready` before `.md`.
+4. Stop editing the submitted file. Once Symphony accepts it, the task appears in the workspace and a blank `New idea-002.md` becomes available. Use the newest numbered draft for your next idea.
+
+Only the numbered `.ready.md` files inside `drafts/phone/` use this flow. Ordinary Markdown directly in `drafts/` still submits automatically. Keep your phone writing inside `drafts/phone/`.
+
+An empty submission stays in place and reports an intake issue. Rename it back to `.md`, write your idea, then close and rename it to `.ready.md` again. Invalid UTF-8 or files over 1 MiB also remain available for correction. Existing unfinished drafts are never overwritten. Previously accepted filenames cannot submit another idea; delayed copies with changed content are preserved as conflicts for inspection.
+
+If a draft disappears while its renamed copy is still syncing, Symphony waits instead of recreating it. A missing file after an interrupted template publication also requires the original draft or ready file to arrive or be restored. Keep `.intake/phone.json` together with the intake receipts when backing up or recovering the workspace; do not delete or reset this journal to restart numbering. If the journal is missing or damaged, restore a matching backup. Phone intake issues appear in the UI, while ordinary draft and UI submission remain available.
+
+Local tests cover autosave, rename, duplicate delivery, interrupted pickup and template publication, and restart recovery. Actual phone/OneDrive delivery is unverified: the stability interval cannot prove cloud ordering. Check the captured task's idea against your phone text when first testing this on the intended deployment.
 
 ## Synced file reviews
 

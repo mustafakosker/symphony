@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +52,29 @@ it('serves health and built UI on loopback and releases lock on shutdown', async
     await expect(readFile(join(fixture.localRoot, 'coordinator.lock/owner.json'), 'utf8')).resolves.toContain('pid');
   } finally { await app.close(); }
   await expect(readFile(join(fixture.localRoot, 'coordinator.lock/owner.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('wires phone opt-in to autosave-safe intake and publishes the successor through the running app', async () => {
+  const fixture = await setup();
+  const config = JSON.parse(await readFile(fixture.configPath, 'utf8'));
+  await writeFile(fixture.configPath, JSON.stringify({ ...config, phoneDraftsEnabled: true }));
+  const app = await startApplication({ configPath: fixture.configPath, buildDir: fixture.buildDir,
+    runner: fixture.runner, verifyCapabilities: async () => {} });
+  const draft = join(config.workspaceRoot, 'drafts/phone/New idea-001.md');
+  const ideas = async () => {
+    const view = await (await fetch(`${app.address}/api/workspace`)).json();
+    return view.tasks.map((task: { idea: string }) => task.idea);
+  };
+  try {
+    await expect.poll(async () => readFile(draft, 'utf8')).toBe('');
+    await writeFile(draft, 'Phone idea');
+    // Wait for multiple real scans without using a model assignment (the fixture has no roles).
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(await ideas()).toEqual([]);
+    await rename(draft, draft.replace('.md', '.ready.md'));
+    await expect.poll(ideas).toEqual(['Phone idea']);
+    await expect.poll(async () => readFile(join(config.workspaceRoot, 'drafts/phone/New idea-002.md'), 'utf8')).toBe('');
+  } finally { await app.close(); }
 });
 
 it('releases the host lock after a capability probe fails before dispatch', async () => {

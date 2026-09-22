@@ -15,7 +15,22 @@ it('applies safe defaults to disjoint roots and an executable CLI', async () => 
   const settings = await loadSettings(path);
   expect(settings).toMatchObject({ port: 4317, concurrency: 1, scanMs: 2000, stableMs: 2000,
     runTimeoutMs: 1_800_000, stopGraceMs: 5000, outputLimitBytes: 10_485_760,
-    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [], fileReviewsEnabled: false });
+    allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [], fileReviewsEnabled: false, phoneDraftsEnabled: false });
+});
+
+it('accepts only a boolean phone draft setting', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'symphony-settings-')); roots.push(root);
+  const workspaceRoot = join(root, 'synced'); const localRoot = join(root, 'local'); const codexBinary = process.execPath;
+  await mkdir(workspaceRoot); await mkdir(localRoot);
+  const path = join(root, 'settings.json');
+  for (const phoneDraftsEnabled of [true, false]) {
+    await writeFile(path, JSON.stringify({ workspaceRoot, localRoot, codexBinary, phoneDraftsEnabled }));
+    expect((await loadSettings(path)).phoneDraftsEnabled).toBe(phoneDraftsEnabled);
+  }
+  for (const phoneDraftsEnabled of ['true', 1, null, [], {}]) {
+    await writeFile(path, JSON.stringify({ workspaceRoot, localRoot, codexBinary, phoneDraftsEnabled }));
+    await expect(loadSettings(path)).rejects.toThrow(/phoneDraftsEnabled/);
+  }
 });
 
 it('accepts only an explicit boolean file review opt-in', async () => {

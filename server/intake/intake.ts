@@ -6,6 +6,7 @@ import type { Issue, Task } from '../../shared/contracts.js';
 import { BoundaryError } from '../../shared/validate.js';
 import { writeAtomic } from '../store/atomic.js';
 import { confinedPath } from '../store/paths.js';
+import { isPhoneReady, preparePhoneDraft } from './phone-drafts.js';
 import type { Store } from '../store/task-store.js';
 
 const MAX_BYTES = 1024 * 1024;
@@ -26,7 +27,7 @@ function lookupKey(filename: string): string {
   return process.platform === 'darwin' || process.platform === 'win32' ? normalized.toLocaleLowerCase('und') : normalized;
 }
 function issueId(name: string, reason: string): string { return `intake-${hash(`${name}:${reason}`).slice(0, 20)}`; }
-function safeFilename(name: string): boolean { return name.endsWith('.md') && !name.startsWith('.') && !name.includes('/') && !name.includes('\\') && basename(name) === name; }
+function safeFilename(name: string): boolean { return isPhoneReady(name) || (name.endsWith('.md') && !name.startsWith('.') && !name.includes('/') && !name.includes('\\') && basename(name) === name); }
 function decode(bytes: Buffer): string { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
 function makeTask(id: string, filename: string, idea: string, nowMs: number): Task {
   const at = new Date(nowMs).toISOString();
@@ -41,7 +42,8 @@ function makeTask(id: string, filename: string, idea: string, nowMs: number): Ta
 }
 
 type IntakeIo = { rename?: typeof rename; open?: typeof open };
-export function createIntake(root: string, store: Store, stableMs: number, io: IntakeIo = {}): Intake {
+export function createIntake(root: string, store: Store, stableMs: number, io: IntakeIo = {},
+  options: { phoneDraftsEnabled?: boolean } = {}): Intake {
   if (!Number.isFinite(stableMs) || stableMs < 0) throw new BoundaryError('invalid', 'Invalid stability interval');
   const observations = new Map<string, Observation>();
   const foundIssues = new Map<string, Issue>();
@@ -214,7 +216,7 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
       return;
     }
     const bytes = await currentBytes(filename);
-    if (!bytes) return;
+    if (!bytes) { if (isPhoneReady(filename)) observations.delete(key); return; }
     const digest = hash(bytes);
     const prior = observations.get(key);
     if (!prior || prior.digest !== digest || prior.size !== bytes.length || nowMs - prior.at < stableMs) {
@@ -236,6 +238,13 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
   }
   async function scanInternal(nowMs: number): Promise<void> {
     await ensureDirs();
+    for (const [id, issue] of foundIssues) {
+      if (issue.message.startsWith('phone drafts:') ||
+          /^phone\/New idea-\d+\.ready\.md: (blank draft|invalid UTF-8 draft|draft exceeds 1 MiB|pickup pending:)/.test(issue.message)) {
+        foundIssues.delete(id);
+      }
+    }
+    let hasPhoneHistory = false;
     for (const entry of await readdir(await path('.intake/conflicts'), { withFileTypes: true })) {
       if (!entry.name.endsWith('.md')) continue;
       if (!entry.isFile() || entry.isSymbolicLink()) { addIssue(entry.name, 'invalid intake conflict archive'); continue; }
@@ -264,6 +273,7 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
       if (!entry.name.endsWith('.json') || !entry.isFile() || entry.isSymbolicLink()) continue;
       try {
         const raw = JSON.parse(await readFile(await path(`.intake/receipts/${entry.name}`), 'utf8')) as Receipt;
+        if (isPhoneReady(raw.filename)) hasPhoneHistory = true;
         const receipt = await readReceipt(raw.key);
         if (receipt) await finishReceipt(receipt);
       } catch { addIssue(entry.name, 'invalid pickup receipt'); }
@@ -308,6 +318,30 @@ export function createIntake(root: string, store: Store, stableMs: number, io: I
       }
     }
     for (const filename of filenames) if (!collisions.has(lookupKey(filename))) await scanOne(filename, nowMs);
+    if (options.phoneDraftsEnabled) {
+      try {
+        const accepted = async (name: string) => {
+          const receipt = await readReceipt(lookupKey(name));
+          return receipt?.phase === 'materialized' && !!receipt.receivedName && !receipt.holdingName;
+        };
+        const current = await preparePhoneDraft(root, accepted, hasPhoneHistory, io.open);
+        const names = await readdir(await path('drafts/phone'));
+        const present = new Set(names.map(name => lookupKey(`phone/${name}`)));
+        for (const key of observations.keys()) {
+          if (key.startsWith('phone/') && !present.has(key)) observations.delete(key);
+        }
+        for (const name of names) {
+          const filename = `phone/${name}`;
+          if (!isPhoneReady(filename)) continue;
+          if (filename === current || await readReceipt(lookupKey(filename))) await scanOne(filename, nowMs);
+          else addIssue('phone drafts', `${name} is not an issued draft; use the current numbered template`);
+        }
+        await preparePhoneDraft(root, accepted, hasPhoneHistory, io.open);
+      } catch (error) {
+        for (const key of observations.keys()) if (key.startsWith('phone/')) observations.delete(key);
+        addIssue('phone drafts', error instanceof Error ? error.message : String(error));
+      }
+    }
   }
   async function ensurePublished(record: Submission): Promise<void> {
     const target = await path(`drafts/${record.filename}`);

@@ -12,6 +12,8 @@ npm run start:local
 
 Open <http://127.0.0.1:4317>. Add free-form Markdown files to `.symphony-local/workspace/drafts/`, or submit an idea in the UI. Answer questions and approve work in the UI. Optional synced Markdown reviews are described in [coordinator operations](docs/coordinator-operations.md#synced-file-reviews). The configured triage, researcher, PRD writer, and reviewer roles are read-only.
 
+For phone capture without uploading files, enable [phone idea drafts](docs/coordinator-operations.md#phone-idea-drafts) on your OneDrive-connected host. Symphony provides `drafts/phone/New idea-001.md`; edit it freely, close the editor, and rename it to `New idea-001.ready.md` to submit. Autosave does not submit. After acceptance, Symphony prepares the next numbered blank. This checkout enables the feature for its local workspace; OneDrive sync still needs to be configured on the designated host.
+
 Local settings are in `symphony.config.json`. Task folders (`drafts`, `active`, `done`, `rejected`, and `cancelled`) and the project/role registries are under `.symphony-local/workspace/`. Execution data, the isolated Codex profile, and existing capability verification are under `.symphony-local/runtime/`. `start:local` selects this isolated profile directory and reuses your existing Codex login. Keep these local folders when updating the code; they contain your saved tasks and configuration. Changes to profiles/registries or the CLI version require renewed capability verification.
 
 After changing code, stop the server, run `npm run build`, then run `npm run start:local` again. A restart is required after rebuilding the UI because the server registers built asset names at startup.
