@@ -40,12 +40,13 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     releaseLock = await acquireHostLock(settings.localRoot);
     const registry = await loadRegistry(settings.workspaceRoot);
     const store = await openStore(settings.workspaceRoot);
+    projects = await openProjectServices(configPath, settings, store, {registry});
+    const startupIssues = await recoverAttempts(projects.schedulerStore, settings.localRoot);
+    if (startupIssues.some(issue => issue.message.includes('could not be persisted'))) throw new Error('Startup recovery could not persist an uncertain run');
     const runner = options.runner ?? createCodexRunner(settings);
     const { version } = await runner.probe();
     await (options.verifyCapabilities ?? verifyConfiguredProfiles)(settings, registry.roles, version);
-    projects = await openProjectServices(configPath, settings, store, {registry, runtimeVersion:version});
-    const startupIssues = await recoverAttempts(projects.schedulerStore, settings.localRoot);
-    if (startupIssues.some(issue => issue.message.includes('could not be persisted'))) throw new Error('Startup recovery could not persist an uncertain run');
+    projects.setRuntimeVersion(version);
     const activeProjects=projects;
     const intake = createIntake(settings.workspaceRoot, store, settings.stableMs, {}, projects.draftGate);
     let fileReviews: FileReviewAdapter | undefined;

@@ -15,9 +15,10 @@ export async function openProjectServices(configPath:string,host:Settings,primar
  const dir=await confinedPath(host.localRoot,'projects/operations');await mkdir(dir,{recursive:true});const path=await confinedPath(dir,'state.json');let queue:Promise<unknown>=Promise.resolve(),background:Promise<void>|null=null;
  type State={operations:Record<string,Operation>};const load=async():Promise<State>=>{try{return JSON.parse(await readFile(path,'utf8'));}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return {operations:{}};throw e;}};
  const save=(s:State)=>writeAtomic(path,JSON.stringify(s));const serial=<T>(f:()=>Promise<T>)=>{const p=queue.catch(()=>{}).then(f);queue=p;return p;};
- const verifyAccess=options.verifyAccess??(async(project:ProjectRecord,snapshot:SnapshotRef)=>{const role=options.registry?.roles.find(r=>r.role==='researcher');if(!role||!options.runtimeVersion)throw new Error('Needs setup: install and verify a read-only researcher profile for this snapshot scope');
+ let runtimeVersion=options.runtimeVersion;
+ const verifyAccess=options.verifyAccess??(async(project:ProjectRecord,snapshot:SnapshotRef)=>{const role=options.registry?.roles.find(r=>r.role==='researcher');if(!role||!runtimeVersion)throw new Error('Needs setup: install and verify a read-only researcher profile for this snapshot scope');
   const task=createBriefTask(project,snapshot),step=task.workflow!.steps[0];if(step.kind!=='agent')throw new Error('Invalid brief workflow');
-  await verifySnapshotProfile(host,{task,step,role,snapshotAccess:await resolveSnapshotAccess(task.projectContext,step.repositories,snapshots)},options.runtimeVersion);
+  await verifySnapshotProfile(host,{task,step,role,snapshotAccess:await resolveSnapshotAccess(task.projectContext,step.repositories,snapshots)},runtimeVersion);
  });
  async function enqueue(kind:OperationStatus['kind'],projectId:string|null,ref:string|undefined,requestId:string,generate=false){return serial(async()=>{
   if(!requestId)throw new BoundaryError('invalid','Request ID required');const state=await load(),id=hash(requestId),digest=hash([kind,projectId,ref,generate]),prior=state.operations[id];if(prior){if(prior.digest!==digest)throw new BoundaryError('conflict','Operation request differs');return prior.status;}
@@ -40,7 +41,7 @@ export async function openProjectServices(configPath:string,host:Settings,primar
   }catch(e){op.status.state='failed';op.status.message=e instanceof Error?e.message:'Project operation failed';if(op.project)await catalog.setReadiness(op.project.id,'failed',op.status.message).catch(()=>{});}
   op.status.revision++;await save(state);
  }});await briefJobs.reconcile();await binding.tick();}
- const api={settings,catalog,snapshots,briefs,briefJobs,binding,draftGate,schedulerStore,primary,resolve,
+ const api={setRuntimeVersion:(version:string)=>{runtimeVersion=version;},settings,catalog,snapshots,briefs,briefJobs,binding,draftGate,schedulerStore,primary,resolve,
   rescan:(requestId:string)=>enqueue('scan',null,undefined,requestId),prepare:(id:string,ref:string,requestId:string)=>enqueue('prepare',id,ref,requestId),
   generate:(id:string,ref:string,requestId:string)=>enqueue('brief',id,ref,requestId,true),verify:async(id:string,requestId:string)=>enqueue('verify',id,(await catalog.get(id)).defaultRef??undefined,requestId),
   operation:(id:string)=>serial(async()=>{const op=(await load()).operations[id];if(!op)return binding.status(id);return {...op.status,...(op.jobId?{candidate:await briefJobs.candidate(op.jobId),source:await briefJobs.source(op.jobId)}:{}),...(op.snapshot?{snapshot:op.snapshot}:{})};}),
