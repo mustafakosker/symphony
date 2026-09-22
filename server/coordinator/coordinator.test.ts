@@ -726,7 +726,7 @@ it('bounds evidence-only report bytes before publishing any artifact', async () 
   expect(saved.runs[0].result).toBeNull();
 });
 
-it('dispatches connected investigations from pinned snapshots after the source is removed', async () => {
+it.each([true, false])('dispatches snapshots after source removal and validates reports (valid=%s)', async validReport => {
  const { createProjectFixture, createRepository } = await import('../testing/projects.js');
  const { scanRoot } = await import('../projects/discovery.js');
  const { openProjectCatalog } = await import('../projects/catalog.js');
@@ -755,7 +755,9 @@ it('dispatches connected investigations from pinned snapshots after the source i
   expect(control.starts[0].repositoryAccess).toEqual([]);
   expect(control.starts[0].snapshotAccess?.[0].snapshotPath).toContain('/projects/snapshots/');
   expect(control.starts[0].snapshotAccess?.[0].snapshotPath).not.toContain('/sources/');
-  control.finish(control.starts[0].run.id, { code: 1, signal: null, result: null, error: 'End fixture' });
-  await until(async () => (await store.get(task.id)).status === 'blocked'); await coordinator.shutdown();
+  control.finish(control.starts[0].run.id, { code: 0, signal: null, error: null, result: { kind: 'completed', taskId: task.id, attemptId: control.starts[0].run.id, summary: 'Findings', artifacts: [], evidence: { findings: JSON.stringify({ format: 'source-report-v1', text: validReport ? 'No relevant code found.' : 'Invented [cite:unknown]', citations: [] }) } } });
+  await until(async () => (await store.get(task.id)).status === (validReport ? 'waiting-for-human' : 'blocked'));
+  expect((await store.get(task.id)).artifacts).toHaveLength(validReport ? 1 : 0);
+  await coordinator.shutdown();
  } finally { await f.dispose(); }
 });

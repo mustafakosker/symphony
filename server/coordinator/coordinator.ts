@@ -1,3 +1,5 @@
+import { parseSourceReport } from '../../shared/source-report.js';
+import { validateSourceReport } from '../projects/citations.js';
 import { openSnapshots } from '../projects/snapshots.js';
 import { resolveSnapshotAccess, snapshotLimits } from '../codex/snapshot-access.js';
 import { assertProjectStep } from '../domain/project-policy.js';
@@ -148,6 +150,18 @@ export function createCoordinator({ store, intake, registry, runner, settings, r
     return slot.uncertainty;
   }
   async function publishResult(assignment: Assignment, result: AgentResult): Promise<AgentResult> {
+    if (assignment.task.schemaVersion === 2) {
+      if (result.artifacts.length) throw new Error('Connected agents return report text, never file artifacts');
+      if (result.kind === 'completed') {
+        const snapshots = await openSnapshots(settings.localRoot, snapshotLimits(settings));
+        const reports = assignment.step.outputs.map(id => ({ id, report: parseSourceReport(JSON.parse(result.kind === 'completed' ? result.evidence[id] : 'null')) }));
+        const limit = Math.min(MAX_MATERIAL_BYTES, settings.outputLimitBytes ?? MAX_MATERIAL_BYTES);
+        if (reports.reduce((total, item) => total + Buffer.byteLength(JSON.stringify(item.report)), 0) > limit) throw new Error('Declared report evidence exceeds the output material limit');
+        for (const { report } of reports) await validateSourceReport(report, assignment.task.projectContext.projects.map(p => p.snapshot), snapshots,
+          { textBytes: assignment.task.purpose === 'project-brief' ? 128 * 1024 : limit, citations: 256 });
+        result = { ...result, evidence: { ...result.evidence, ...Object.fromEntries(reports.map(item => [item.id, JSON.stringify(item.report)])) } };
+      }
+    }
     await validateDeclaredArtifacts(result, assignment.outputDir);
     const refs: ArtifactRef[] = [];
     for (const item of result.artifacts) {

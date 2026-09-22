@@ -73,3 +73,4 @@ export type SnapshotEntry = { path: string; mode: string; kind: 'file' | 'symlin
  objectId: string; contentDigest: string | null; bytes: number; text: boolean; lfsPointer: boolean };
 export type SnapshotManifest = { version: 1; ref: Omit<SnapshotRef,'manifestDigest'>; entries: SnapshotEntry[]; totalBytes: number };
 export type SnapshotLimits = { entries: number; totalBytes: number; fileBytes: number; timeoutMs: number };
+export type SourcePreview = { repositoryId:string;commit:string;path:string;firstLine:number;startLine:number;endLine:number;lines:string[] };
