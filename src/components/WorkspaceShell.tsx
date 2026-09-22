@@ -26,6 +26,8 @@ const viewNames: Record<Filter, string> = {
   all: "All tasks", review: "Needs review", active: "Active", closed: "Closed",
 };
 
+const keepDesktopNavigationOpen = () => {};
+
 function SearchShortcut({ onSearch }: { onSearch(): void }) {
   const { setOpenMobile } = useSidebar();
   useEffect(() => {
@@ -44,7 +46,7 @@ function SearchShortcut({ onSearch }: { onSearch(): void }) {
 
 export default function WorkspaceShell({ tasks, filter, task, connected, coordinator, detail, onFilter, onSearch, onBack, children }: Props) {
   const [help, setHelp] = useState(false);
-  return <TooltipProvider><SidebarProvider className="workspace-shell">
+  return <TooltipProvider><SidebarProvider className="workspace-shell" open onOpenChange={keepDesktopNavigationOpen}>
     <SearchShortcut onSearch={onSearch} />
     <WorkspaceSidebar tasks={tasks} filter={filter} connected={connected} coordinator={coordinator} onFilter={onFilter} onSearch={onSearch} />
     <SidebarInset className="workspace-inset">

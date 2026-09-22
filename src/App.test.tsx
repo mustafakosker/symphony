@@ -87,6 +87,33 @@ it("closes the mobile workspace menu and focuses search with Ctrl+K", async () =
   }
 });
 
+it("keeps desktop workspace navigation visible after Ctrl+B", async () => {
+  const user = userEvent.setup();
+  render(<App api={api()} />);
+  await screen.findByRole("heading", { name: "All tasks" });
+  const sidebar = screen.getByRole("navigation", { name: "Workspace" })
+    .closest('[data-slot="sidebar"][data-state]');
+  expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await user.keyboard("{Control>}b{/Control}");
+  expect(sidebar).toHaveAttribute("data-state", "expanded");
+});
+
+it("keeps the mobile menu shortcut available", async () => {
+  const width = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 600 });
+  try {
+    const user = userEvent.setup();
+    render(<App api={api()} />);
+    await screen.findByRole("heading", { name: "All tasks" });
+    await user.keyboard("{Control>}b{/Control}");
+    expect(screen.getByRole("dialog", { name: "Sidebar" })).toBeInTheDocument();
+    await user.keyboard("{Control>}b{/Control}");
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).not.toBeInTheDocument();
+  } finally {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  }
+});
+
 it("does not invent work when the coordinator is unavailable", async () => {
   const offline = api(async () => {
     throw new Error("Coordinator unavailable");
