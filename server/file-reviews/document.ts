@@ -11,7 +11,9 @@ function slug(title: string): string {
 }
 
 function safeFence(text: string): string {
-  return '`'.repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map(match => match[0].length + 1)));
+  let length = 3;
+  for (const match of text.matchAll(/`+/g)) length = Math.max(length, match[0].length + 1);
+  return '`'.repeat(length);
 }
 
 function workflowScope(workflow: Workflow | null): string {

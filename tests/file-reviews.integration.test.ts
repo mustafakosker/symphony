@@ -27,7 +27,7 @@ async function unusedPort(): Promise<number> {
   await new Promise<void>(done => server.close(() => done()));
   return address.port;
 }
-async function setup(enabled: boolean, beforeStart?: (workspaceRoot: string) => Promise<void>) {
+async function setup(enabled: boolean, beforeStart?: (workspaceRoot: string, localRoot: string) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), 'symphony-file-reviews-app-')); roots.push(root);
   const workspaceRoot = join(root, 'workspace'); const localRoot = join(root, 'local');
   await Promise.all([mkdir(join(workspaceRoot, 'projects'), { recursive: true }),
@@ -37,7 +37,7 @@ async function setup(enabled: boolean, beforeStart?: (workspaceRoot: string) => 
     { role: 'triage', instructions: 'Fixture triage', skills: [], cliProfile: 'triage', actions: ['read'] },
     { role: 'researcher', instructions: 'Fixture research', skills: [], cliProfile: 'researcher', actions: ['read'] },
   ] }));
-  await beforeStart?.(workspaceRoot);
+  await beforeStart?.(workspaceRoot, localRoot);
   const port = await unusedPort(); const configPath = join(root, 'config.json');
   await writeFile(configPath, JSON.stringify({ workspaceRoot, localRoot, codexBinary: process.execPath,
     port, allowedOrigin: `http://127.0.0.1:${port}`, scanMs: 25, stableMs: 1, stopGraceMs: 100,
@@ -204,3 +204,31 @@ it('leaves ready files inert when disabled and reports unknown files when enable
   const view = await until(() => workspace(enabled.app), result => result.issues.some(issue => issue.message.includes('stray.ready.md')));
   expect(view.tasks).toHaveLength(0);
 });
+
+
+it('exposes journal infrastructure failure while UI decisions and scheduling remain operational, then recovers', async () => {
+  const pending = waitingTask();
+  const { workspaceRoot, localRoot, app } = await setup(true, async (workspaceRoot, localRoot) => {
+    const store = await openStore(workspaceRoot); await store.create(pending, 'seed-waiting');
+    await writeFile(join(localRoot, 'file-reviews'), 'not a directory');
+  });
+  const view = await until(() => workspace(app), result => result.issues.some(issue => issue.message.includes('journal unavailable')));
+  expect(view.tasks.find(task => task.id === pending.id)?.revision).toBe(1);
+  expect(await (await fetch(`${app.address}/api/health`)).json()).toMatchObject({ status: 'ready' });
+  const response = await fetch(`${app.address}/api/tasks/${pending.id}/commands`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: app.address },
+    body: JSON.stringify({ requestId: 'ui-during-journal-failure', taskId: pending.id, expectedRevision: 1,
+      action: { kind: 'reject', reviewId: pending.reviews[0].id, text: 'UI remains available' } }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ status: 'rejected' });
+  await mkdir(join(workspaceRoot, 'drafts'), { recursive: true });
+  await writeFile(join(workspaceRoot, 'drafts', 'unrelated.md'), '# Unrelated work\n');
+  await until(() => workspace(app), result => result.tasks.some(task => task.id !== pending.id &&
+    task.reviews.some(review => review.kind === 'workflow')));
+  await rm(join(localRoot, 'file-reviews'));
+  await until(() => workspace(app), result => !result.issues.some(issue => issue.message.includes('journal unavailable')));
+  const draft = await draftFor(workspaceRoot, '## Workflow approval');
+  await submit(workspaceRoot, draft, 'reject', 'Recovered file adapter');
+  expect(await (await fetch(`${app.address}/api/health`)).json()).toMatchObject({ status: 'ready' });
+}, 15_000);

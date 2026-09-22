@@ -63,6 +63,10 @@ async function readStable(root: string, relative: string, limit: number, afterOp
 export async function readBounded(root: string, relative: string, afterOpen?: () => Promise<void>): Promise<Buffer | null> {
   return readStable(root, relative, LIMIT, afterOpen);
 }
+/** Receipt output includes metadata and fences beyond the bounded input; never read more than the expected output. */
+export async function readReceipt(root: string, relative: string, expectedBytes: number): Promise<Buffer | null> {
+  return readStable(root, relative, expectedBytes);
+}
 /** Verifies material bytes without applying the 1 MiB response intake limit. */
 export async function verifyMaterial(root: string, relative: string, expectedDigest: string): Promise<boolean> {
   const opened = await openSafe(root, relative);
