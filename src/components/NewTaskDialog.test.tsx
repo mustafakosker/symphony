@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import NewTaskDialog from "./NewTaskDialog";
 
@@ -53,4 +53,79 @@ it("describes coordinator intake and returns focus after Escape", async () => {
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "New task" })).toHaveFocus(),
   );
+});
+
+function ReopeningHarness({
+  onSubmit,
+}: {
+  onSubmit: (markdown: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}>New task</button>
+      <NewTaskDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onSubmit={onSubmit}
+        canSubmit
+      />
+    </>
+  );
+}
+
+it("keeps a reopened draft when an earlier submission succeeds", async () => {
+  const user = userEvent.setup();
+  let resolve!: () => void;
+  const submit = vi.fn(
+    () =>
+      new Promise<void>((finish) => {
+        resolve = finish;
+      }),
+  );
+  render(<ReopeningHarness onSubmit={submit} />);
+
+  await user.click(screen.getByRole("button", { name: "New task" }));
+  await user.type(screen.getByLabelText("Brief"), "Old draft");
+  await user.click(screen.getByRole("button", { name: "Submit draft" }));
+  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("button", { name: "New task" }));
+  await user.type(screen.getByLabelText("Brief"), "New draft");
+
+  await act(async () => resolve());
+  expect(
+    screen.getByRole("dialog", { name: "Submit a draft" }),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Brief")).toHaveValue("New draft");
+  expect(screen.getByRole("button", { name: "Submit draft" })).toBeEnabled();
+  expect(submit).toHaveBeenCalledTimes(1);
+});
+
+it("blocks a second submission and isolates an earlier failure from a reopened draft", async () => {
+  const user = userEvent.setup();
+  let reject!: (error: Error) => void;
+  const submit = vi.fn(
+    () =>
+      new Promise<void>((_finish, fail) => {
+        reject = fail;
+      }),
+  );
+  render(<ReopeningHarness onSubmit={submit} />);
+
+  await user.click(screen.getByRole("button", { name: "New task" }));
+  await user.type(screen.getByLabelText("Brief"), "Old draft");
+  await user.click(screen.getByRole("button", { name: "Submit draft" }));
+  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("button", { name: "New task" }));
+  await user.type(screen.getByLabelText("Brief"), "New draft");
+  expect(screen.getByRole("button", { name: "Submit draft" })).toBeDisabled();
+  expect(submit).toHaveBeenCalledTimes(1);
+
+  await act(async () => reject(new Error("Old failure")));
+  expect(
+    screen.getByRole("dialog", { name: "Submit a draft" }),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Brief")).toHaveValue("New draft");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Submit draft" })).toBeEnabled();
 });

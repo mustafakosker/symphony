@@ -27,22 +27,30 @@ export default function NewTaskDialog({
   const opener = useRef<HTMLElement | null>(null);
   const briefField = useRef<HTMLTextAreaElement>(null);
   const wasOpen = useRef(false);
+  const session = useRef(0);
+  const inFlight = useRef(false);
   const [brief, setBrief] = useState("");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (open !== wasOpen.current) session.current += 1;
     if (open && !wasOpen.current) {
       setBrief("");
       setTitle("");
       setError("");
-      setBusy(false);
     }
     wasOpen.current = open;
   }, [open]);
 
+  const requestClose = () => {
+    session.current += 1;
+    onClose();
+  };
+
   const submit = async () => {
+    if (inFlight.current) return;
     if (!brief.trim()) {
       setError("Add a brief before submitting.");
       return;
@@ -50,13 +58,18 @@ export default function NewTaskDialog({
     const markdown = title.trim()
       ? `# ${title.trim()}\n\n${brief.trim()}`
       : brief.trim();
+    const submittedSession = session.current;
+    inFlight.current = true;
     setBusy(true);
     try {
       await onSubmit(markdown);
-      onClose();
+      if (session.current === submittedSession) requestClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Submission failed");
+      if (session.current === submittedSession) {
+        setError(cause instanceof Error ? cause.message : "Submission failed");
+      }
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
@@ -65,7 +78,7 @@ export default function NewTaskDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (!next) requestClose();
       }}
     >
       <DialogContent
@@ -100,7 +113,7 @@ export default function NewTaskDialog({
               size="icon-sm"
               type="button"
               aria-label="Close new task"
-              onClick={onClose}
+              onClick={requestClose}
             >
               <X size={18} />
             </Button>
