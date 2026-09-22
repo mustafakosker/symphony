@@ -60,3 +60,12 @@ export type OperationStatus = {
 };
 export type RootSetting = { projectsRoot: string | null; revision: string; generation: string;
   state: 'unset' | 'ready' | 'unavailable'; message: string | null };
+export type DiscoveryEntry = { name: string; canonicalPath: string | null; gitDir: string | null;
+ branches: string[]; currentBranch: string | null; observedCommit: string | null; error: string | null };
+export type DiscoveryResult = { entries: DiscoveryEntry[]; scannedAt: string };
+export type ProjectRecord = ProjectName & { repositoryId: string; generation: string; sourcePath: string;
+ gitDir: string; displayName: string; defaultRef: string | null; branches: string[]; observedCommit: string | null;
+ revision: string; readiness: ProjectReadiness; error: string | null; lastScannedAt: string };
+export type CatalogSnapshot = CatalogView & { records: ProjectRecord[]; ineligible: DiscoveryEntry[]; scannedAt: string };
+export type ProjectEdit = { projectId: string; expectedRevision: string; requestId: string;
+ aliases: string[]; displayName: string; defaultRef: string | null };

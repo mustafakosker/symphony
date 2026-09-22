@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, rm, readdir, readFile, lstat, readlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readdir, readFile, lstat, readlink, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 export async function createProjectFixture() {
-  const base = await mkdtemp(join(tmpdir(), 'symphony-project-'));
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'symphony-project-')));
   const root = join(base, 'sources'), local = join(base, 'local'), workspace = join(base, 'workspace');
   await Promise.all([root, local, workspace].map(path => mkdir(path)));
   return { base, root, local, workspace, configPath: join(base, 'config.json'),
