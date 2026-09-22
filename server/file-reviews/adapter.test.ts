@@ -77,5 +77,52 @@ it('exports exact versioned artifact material from the store', async () => {
     const material = join(fixture.workspaceRoot, 'reviews', record.materials[0].filename);
     expect(await readFile(material)).toEqual(bytes);
     expect((await readFile(await draftFile(fixture.workspaceRoot), 'utf8'))).toContain(record.materials[0].filename);
+    await fixture.store.apply(task.id, task.revision, 'reject-artifact', { kind: 'human', command: {
+      requestId: 'reject-artifact', taskId: task.id, expectedRevision: task.revision,
+      action: { kind: 'reject', reviewId: 'artifact-review', text: 'Needs work' } } });
+    expect((await fixture.store.get(task.id)).status).toBe('rejected');
+    expect(await readFile(material)).toEqual(bytes);
+  } finally { await fixture.dispose(); }
+});
+
+it('ignores unsupported reviews and reports orphaned synced Markdown', async () => {
+  const { waitingTask } = await import('../testing/fixtures.js');
+  const { join } = await import('node:path');
+  const { mkdir } = await import('node:fs/promises');
+  for (const kind of ['pause', 'reconciliation'] as const) {
+    const task = waitingTask();
+    task.reviews[0].kind = kind;
+    const fixture = await fileReviewFixture(task);
+    try {
+      await mkdir(join(fixture.workspaceRoot, 'reviews'));
+      await writeFile(join(fixture.workspaceRoot, 'reviews', 'orphan.ready.md'), 'action: approve');
+      await fixture.adapter.scan(0);
+      expect((await fixture.adapter.issues()).some(i => i.message.includes('Unknown synced review file orphan.ready.md'))).toBe(true);
+      await expect(draftFile(fixture.workspaceRoot)).rejects.toThrow();
+    } finally { await fixture.dispose(); }
+  }
+});
+
+it('loads a valid journal containing a 1 MiB snapshot and rejects symlinked journal entries', async () => {
+  const { loadRecords, saveRecord } = await import('./io.js');
+  const { createHash } = await import('node:crypto');
+  const { join } = await import('node:path');
+  const { symlink, unlink } = await import('node:fs/promises');
+  const fixture = await fileReviewFixture();
+  try {
+    await fixture.adapter.scan(0);
+    const record = (await loadRecords(fixture.localRoot)).records[0];
+    const bytes = Buffer.alloc(1024 * 1024, 42);
+    await saveRecord(fixture.localRoot, { ...record, phase: 'captured',
+      snapshot: { base64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') } });
+    expect((await loadRecords(fixture.localRoot)).records).toHaveLength(1);
+    const journal = join(fixture.localRoot, 'file-reviews', 'requests', `${record.token}.json`);
+    const target = join(fixture.root, 'saved-journal.json');
+    await rename(journal, target);
+    await symlink(target, journal);
+    const loaded = await loadRecords(fixture.localRoot);
+    expect(loaded.records).toHaveLength(0);
+    expect(loaded.issues).toHaveLength(1);
+    await unlink(journal);
   } finally { await fixture.dispose(); }
 });

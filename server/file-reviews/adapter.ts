@@ -5,7 +5,7 @@ import type { Command, Issue, Task } from '../../shared/contracts.js';
 import type { Store } from '../store/task-store.js';
 import { makeRequest, renderDraft } from './document.js';
 import { selectReview, type RequestRecord } from './model.js';
-import { loadRecords, publishExclusive, readBounded, saveRecord } from './io.js';
+import { loadRecords, publishExclusive, readBounded, saveRecord, verifyMaterial } from './io.js';
 
 export type FileReviewAdapter = { scan(nowMs: number): Promise<void>; issues(): Promise<Issue[]> };
 export type FileReviewOptions = { workspaceRoot: string; localRoot: string; stableMs: number; store: Store; apply(command: Command): Promise<Task> };
@@ -77,8 +77,8 @@ export function createFileReviews(options: FileReviewOptions): FileReviewAdapter
             try { await publishExclusive(options.workspaceRoot, `reviews/${material.filename}`, bytes); }
             catch (error) {
               if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-              const existing = await readBounded(options.workspaceRoot, `reviews/${material.filename}`);
-              if (!existing || !same(existing, bytes)) throw new Error('Existing material differs from approved artifact');
+              if (!await verifyMaterial(options.workspaceRoot, `reviews/${material.filename}`, material.ref.digest))
+                throw new Error('Existing material differs from approved artifact');
             }
           }
           await saveRecord(options.localRoot, record);
