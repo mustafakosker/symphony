@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-The user approved the visual direction and revised density on 2026-09-22, then authorized implementation planning after receiving this written specification. Implementation awaits review of the plan and selection of its execution method.
+The user approved the visual direction and revised density on 2026-09-22, then selected subagent-driven implementation. The replacement is implemented and its final verification is recorded in [the execution report](../execution/linear-inspired-ui-verification.md).
 
 Replace Symphony's existing presentation with a task workspace inspired by Linear's layout discipline, using actual shadcn/ui components, Geist Sans, and the user's charcoal/lavender palette. Success means users can scan their tasks, open a focused task page, inspect agent work, and answer or approve reviews through a consistent, readable interface.
 

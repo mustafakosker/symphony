@@ -542,4 +542,4 @@ All tests and both UI/server builds must pass. If code changes follow a failure,
 | Offline/degraded/error states and existing coordinator behavior | 3, 5, 7 |
 | Obsolete UI removal, tests/build/browser checks, documentation | 7 |
 
-Implementation has not started. Review this plan and choose an execution method first. Recommended: **Native**, because the seven tasks share presentation interfaces and the existing backend/command behavior stays in place. The primary agent can carry those decisions through sequentially, followed by one independent whole-branch review. **Subagent-driven** execution provides a separate implementer/reviewer cycle per task at a higher context cost.
+Implementation used the approved subagent-driven method. Tasks 1–7 are complete; the final browser and regression evidence is in [the execution report](../execution/linear-inspired-ui-verification.md). Whole-branch review remains with the controller.

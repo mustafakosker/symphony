@@ -2,6 +2,8 @@
 
 Symphony is an initial local coordinator for free-form Markdown drafts. A folder-backed task store and sequential scheduler run bounded Codex CLI assignments, stop at human review checkpoints, and expose persisted state through a loopback HTTP API and React UI. The UI shows live run output, versioned artifacts, workflow scope, questions, feedback, and terminal history.
 
+The workspace opens to a task list. Use the sidebar to switch among All tasks, Needs review, Active, and Closed, or search by title, brief, type, or source. Open a row for its dedicated task page; the back control returns to the originating list. Overview contains pending reviews and workflow steps, Activity contains available run and review history, and Artifacts contains saved versions. At narrow widths, the menu opens the sidebar and Properties expands within the task page. Command/Ctrl+K focuses task search.
+
 This checkout has a local setup with no projects or repositories required:
 
 ```sh
@@ -13,6 +15,8 @@ Open <http://127.0.0.1:4317>. Add free-form Markdown files to `.symphony-local/w
 Local settings are in `symphony.config.json`. Task folders (`drafts`, `active`, `done`, `rejected`, and `cancelled`) and the project/role registries are under `.symphony-local/workspace/`. Execution data, the isolated Codex profile, and existing capability verification are under `.symphony-local/runtime/`. `start:local` selects this isolated profile directory and reuses your existing Codex login. Keep these local folders when updating the code; they contain your saved tasks and configuration. Changes to profiles/registries or the CLI version require renewed capability verification.
 
 After changing code, stop the server, run `npm run build`, then run `npm run start:local` again. A restart is required after rebuilding the UI because the server registers built asset names at startup.
+
+The UI uses local Geist Sans 400/500 files imported in `src/main.tsx`, Radix-backed shadcn components in `src/components/ui/`, theme tokens in `src/styles/tokens.css`, and workspace/task layout rules in `src/styles/workspace.css` and `src/styles/task.css`.
 
 Use Node.js **22.12 or newer**. Install dependencies without upgrading them, copy the examples in `config/examples/`, and follow [coordinator operations](docs/coordinator-operations.md) to provision a designated host, local OneDrive sync root, separate work directory, roles, project aliases and verified read-only/mutating profiles. Then:
 
@@ -31,6 +35,6 @@ npm test -- --run
 npm run build
 ```
 
-`npm run preview:fake` after build starts a disposable fake-only browser preview at `127.0.0.1:4321`; its task roots are temporary and removed on shutdown. The separate opt-in real CLI smoke is described in [operations](docs/coordinator-operations.md). Do not point that smoke at company repositories.
+`npm run preview:fake` after build starts a disposable fake-only browser preview at `127.0.0.1:4321`; its task roots are temporary and removed on shutdown. Set `SYMPHONY_PREVIEW_EMPTY=1` to check an empty workspace or `SYMPHONY_PREVIEW_PORT` to choose another loopback port. The separate opt-in real CLI smoke is described in [operations](docs/coordinator-operations.md). Do not point that smoke at company repositories.
 
 This slice has been checked with temporary filesystem roots, a fake CLI subprocess, DOM tests and desktop/narrow Chrome browser checks. Real OneDrive sync behavior, company authentication and reverse proxy, deployment Codex credentials/profile permissions, and mutating external effects remain unverified. The built-in listener is local only; no public or mobile network deployment is supplied.
