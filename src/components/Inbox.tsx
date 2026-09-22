@@ -6,6 +6,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import type { Task } from "../../shared/contracts";
+import type { Filter } from "../tasks/presentation";
+export type { Filter } from "../tasks/presentation";
 import {
   matchesFilter,
   needsReview,
@@ -13,7 +15,6 @@ import {
   typeLabel,
 } from "../tasks/presentation";
 import { TypeIcon } from "./Icons";
-export type Filter = "all" | "review" | "active" | "closed";
 export type InboxProps = {
   tasks: Task[];
   selectedId: string | null;

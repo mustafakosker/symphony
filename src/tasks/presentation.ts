@@ -1,5 +1,32 @@
 import type { Task } from "../../shared/contracts";
 
+export type Filter = "all" | "review" | "active" | "closed";
+export type TaskGroup = {
+  id: "review" | "active" | "waiting" | "closed";
+  label: string;
+  tasks: Task[];
+};
+
+export function groupTasks(tasks: Task[], filter: Filter, query: string): TaskGroup[] {
+  const groups: TaskGroup[] = [
+    { id: "review", label: "Needs review", tasks: [] },
+    { id: "active", label: "Active", tasks: [] },
+    { id: "waiting", label: "Waiting", tasks: [] },
+    { id: "closed", label: "Closed", tasks: [] },
+  ];
+  const search = query.toLowerCase();
+  for (const task of tasks) {
+    if (!matchesFilter(task, filter)) continue;
+    if (!`${task.title} ${task.idea} ${task.type} ${task.source}`.toLowerCase().includes(search)) continue;
+    const group = needsReview(task) ? groups[0]
+      : isClosed(task) ? groups[3]
+      : matchesFilter(task, "active") ? groups[1]
+      : groups[2];
+    group.tasks.push(task);
+  }
+  return groups.filter((group) => group.tasks.length > 0);
+}
+
 export function needsReview(task: Task): boolean {
   return task.status === "waiting-for-human" && task.reviews.some((review) => review.decision === null);
 }
@@ -33,7 +60,7 @@ export function typeLabel(type: string): string {
 }
 export function matchesFilter(
   task: Task,
-  filter: "all" | "review" | "active" | "closed",
+  filter: Filter,
 ): boolean {
   if (filter === "review") return needsReview(task);
   if (filter === "closed") return isClosed(task);
