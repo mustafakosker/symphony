@@ -374,3 +374,224 @@
   .detail-panel .stage-toggle { gap: 9px; }
   .detail-panel .review-tag { display: none; }
 }
+
+/* Focused task page */
+.detail-panel .task-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 224px;
+  min-width: 0;
+  min-height: 100%;
+}
+
+.detail-panel .detail-scroll {
+  min-width: 0;
+  overflow: auto;
+}
+
+.workspace-main .detail-panel .detail-inner {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 30px 36px 60px;
+}
+
+.detail-panel .task-topline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  min-width: 0;
+  margin-bottom: 16px;
+  color: var(--metadata);
+  font-size: 12px;
+}
+
+.detail-panel .task-status-badge {
+  height: 22px;
+  max-width: 100%;
+  border-radius: 5px;
+  border-color: #a89be831;
+  background: #a89be818;
+  color: #c3b8ee;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.detail-panel .task-status-badge.status-done { color: #79d9aa; border-color: #79d9aa40; background: #79d9aa12; }
+.detail-panel .task-status-badge.status-cancelled,
+.detail-panel .task-status-badge.status-rejected { color: var(--muted-foreground); border-color: var(--border); background: var(--panel); }
+.detail-panel .task-status-badge.status-blocked { color: var(--destructive); border-color: #ff9aa940; background: #ff9aa912; }
+
+.detail-panel .detail-title {
+  min-width: 0;
+  margin: 0 0 14px;
+  color: var(--foreground);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.26;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.detail-panel .task-description {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.detail-panel .detail-tabs[data-slot="tabs-list"] {
+  display: flex;
+  align-items: stretch;
+  gap: 26px;
+  min-width: 0;
+  height: auto;
+  margin: 30px 0 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.detail-panel .detail-tabs [data-slot="tabs-trigger"] {
+  position: relative;
+  flex: none;
+  height: 42px;
+  padding: 0 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.detail-panel .detail-tabs [data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.detail-panel .detail-tabs [data-slot="tabs-trigger"][data-state="active"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+}
+
+.detail-panel .detail-tabs [data-slot="tabs-trigger"] > span {
+  margin-left: 5px;
+  color: var(--metadata);
+  font-size: 12px;
+}
+
+.detail-panel [data-slot="tabs-content"] {
+  min-width: 0;
+  padding-top: 2px;
+  outline: none;
+}
+
+.detail-panel [hidden] { display: none !important; }
+
+.detail-panel .task-properties-rail {
+  min-width: 0;
+  padding: 30px 18px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.detail-panel .task-property-content { min-width: 0; }
+.detail-panel .task-property-content h2 {
+  margin: 0 0 20px;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+}
+.detail-panel .task-property-content dl { margin: 0; }
+.detail-panel .task-property-content dl > div { margin-bottom: 19px; }
+.detail-panel .task-property-content dt {
+  margin: 0 0 5px;
+  color: var(--metadata);
+  font-size: 12px;
+}
+.detail-panel .task-property-content dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.detail-panel .task-next-up {
+  margin-top: 28px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+}
+.detail-panel .task-next-up p {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.detail-panel .task-properties-mobile { display: none; }
+
+.detail-panel .activity-view,
+.detail-panel .task-artifacts {
+  min-width: 0;
+  padding: 28px 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.detail-panel .activity-view h3,
+.detail-panel .task-artifacts h3 {
+  margin: 0 0 16px;
+  color: var(--foreground);
+  font-size: 16px;
+  font-weight: 500;
+}
+.detail-panel .activity-view ol { margin: 0 0 12px; padding: 0; list-style: none; }
+.detail-panel .activity-item { display: grid; gap: 5px; padding: 15px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.detail-panel .activity-item strong { color: var(--foreground); font-size: 14px; font-weight: 500; }
+.detail-panel .activity-item time,
+.detail-panel .activity-undated { color: var(--metadata); font-size: 12px; }
+.detail-panel .activity-item p { margin: 0; color: var(--muted-foreground); line-height: 1.6; white-space: pre-wrap; }
+.detail-panel .task-artifacts ul { min-width: 0; margin: 0; padding: 0; list-style: none; }
+.detail-panel .task-artifacts li { min-width: 0; }
+.detail-panel .task-review,
+.detail-panel .closed-banner,
+.detail-panel .workflow-proposal { overflow-wrap: anywhere; }
+.detail-panel pre { max-width: 100%; overflow-x: auto; }
+
+@media (max-width: 950px) {
+  .detail-panel .task-detail-layout { display: block; }
+  .detail-panel .task-properties-rail { display: none; }
+  .detail-panel .task-properties-mobile { display: block; margin-top: 20px; }
+  .detail-panel .task-properties-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--foreground);
+    font-size: 13px;
+  }
+  .detail-panel .task-properties-trigger[data-state="open"] svg { transform: rotate(180deg); }
+  .detail-panel .task-properties-mobile .task-property-content { padding: 20px 14px 1px; border: 1px solid var(--border); border-top: 0; background: var(--panel); }
+}
+
+@media (max-width: 649px) {
+  .workspace-main .detail-panel .detail-inner { padding: 20px 20px 40px; }
+  .detail-panel .detail-title { font-size: 24px; }
+  .detail-panel .detail-tabs[data-slot="tabs-list"] { gap: 20px; overflow-x: auto; }
+  .detail-panel .detail-tabs [data-slot="tabs-trigger"] { font-size: 14px; }
+}

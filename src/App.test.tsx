@@ -263,7 +263,7 @@ it("shows the pending workflow review beside the proposed steps", async () => {
   };
   render(<App api={api(async () => proposed)} />);
   await openDraft();
-  expect(screen.getByText("Approve proposed workflow?")).toBeInTheDocument();
+  expect(within(screen.getByRole("tabpanel")).getByText("Approve proposed workflow?")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Research/ })).toBeInTheDocument();
 });
 
@@ -421,16 +421,19 @@ it("keeps Continue available while a pending pause hides checkpoint insertion", 
     expectedRevision: paused.revision, action: { kind: "approve", reviewId: "pause-review", artifactDigests: [] } }));
 });
 
-it("wraps a long task title and preserves multiline review text", async () => {
+it("wraps a long task title and preserves a multiline question and source path", async () => {
   const user = userEvent.setup();
   const reviewing = waitingTask();
   reviewing.title = "A".repeat(180);
+  reviewing.source = `drafts/${"deeply-nested/".repeat(32)}idea.md`;
+  reviewing.reviews[0].kind = "question";
   reviewing.reviews[0].prompt = "First line\nSecond line";
   render(<App api={api(async () => ({ tasks: [reviewing], issues: [], coordinator: "ready" }))} />);
   await screen.findByRole("heading", { name: "All tasks" });
   await user.click(screen.getByRole("button", { name: new RegExp(reviewing.title) }));
   expect(await screen.findByRole("heading", { name: reviewing.title })).toBeInTheDocument();
-  expect(screen.getByText(/First line\s+Second line/)).toHaveClass("review-prompt");
+  expect(within(screen.getByRole("tabpanel")).getByText(/First line\s+Second line/)).toHaveClass("review-prompt");
+  expect(screen.getByText(reviewing.source)).toBeInTheDocument();
 });
 
 it("routes cancellation through the coordinator and keeps partial output links", async () => {
@@ -451,5 +454,6 @@ it("routes cancellation through the coordinator and keeps partial output links",
   await user.keyboard("{Enter}");
   await user.click(screen.getByRole("menuitem", { name: "Cancel task" }));
   expect(boundary.command).toHaveBeenCalledWith(expect.objectContaining({ taskId: current.id, expectedRevision: 1, action: { kind: "cancel" } }));
+  await user.click(screen.getByRole("tab", { name: /Artifacts/ }));
   expect(await screen.findByRole("link", { name: "notes · v2" })).toHaveAttribute("href", `/api/tasks/${current.id}/artifacts/notes?version=2`);
 });
