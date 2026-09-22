@@ -1,16 +1,17 @@
 @import "tailwindcss";
-@theme {
-  --font-sans:
-    "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-}
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./styles/tokens.css";
+
+@custom-variant dark (&:is(.dark *));
+
 :root {
   font-family: var(--font-sans);
   color-scheme: dark;
-  color: #e9eaf0;
-  background: #1b1e27;
+  color: var(--foreground);
+  background: var(--background);
   font-synthesis: none;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
 }
@@ -38,8 +39,8 @@ button:focus-visible,
 a:focus-visible {
   outline: 2px solid #7162d6;
 }
-input:focus,
-textarea:focus {
+input:not([data-slot]):focus,
+textarea:not([data-slot]):focus {
   outline: 2px solid #b2a8f0;
   outline-offset: 1px;
 }
@@ -52,8 +53,8 @@ button {
 button:disabled {
   cursor: default;
 }
-input,
-textarea {
+input:not([data-slot]),
+textarea:not([data-slot]) {
   width: 100%;
   border: 1px solid #30333f;
   border-radius: 7px;
@@ -61,12 +62,12 @@ textarea {
   padding: 11px 12px;
   color: #e9eaf0;
 }
-textarea {
+textarea:not([data-slot]) {
   resize: vertical;
   line-height: 1.7;
 }
-input::placeholder,
-textarea::placeholder {
+input:not([data-slot])::placeholder,
+textarea:not([data-slot])::placeholder {
   color: #b5b8c0;
 }
 h1,
@@ -1661,13 +1662,12 @@ button {
   --text-heading: #f4f6fb;
   --text-body: #d0d5df;
   --text-muted: #a0a8b9;
-  --accent: #c2a7ff;
   --review: #f2c46d;
   --agent: #86c5ff;
   --success: #79d9aa;
   --danger: #ff9aa9;
-  background: #111319;
-  color: var(--text-body);
+  background: var(--background);
+  color: var(--foreground);
 }
 .app-header {
   background: #14161d;
@@ -1976,15 +1976,15 @@ button {
   color: #e3d3ff;
 }
 .task-dialog,
-input,
-textarea,
+input:not([data-slot]),
+textarea:not([data-slot]),
 .search-box input {
   background: #1e232d;
   color: #edf0f7;
   border-color: #475165;
 }
-input::placeholder,
-textarea::placeholder {
+input:not([data-slot])::placeholder,
+textarea:not([data-slot])::placeholder {
   color: #9ca8bc;
 }
 .task-dialog::backdrop {
@@ -2152,7 +2152,7 @@ textarea::placeholder {
 }
 .review-artifacts a,
 .task-artifacts a {
-  color: var(--accent);
+  color: var(--primary);
 }
 .review-artifacts span {
   color: var(--text-muted);
@@ -2197,9 +2197,64 @@ textarea::placeholder {
 .stage-card.stale { border-style: dashed; }
 .stage-card .terminal-block { margin-top: 12px; }
 button:disabled { cursor: not-allowed; opacity: .55; }
-textarea:focus-visible,
-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+textarea:not([data-slot]):focus-visible,
+input:not([data-slot]):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .detail-properties > span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.draft-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-width: min(520px, calc(100vw - 32px));
+  max-height: min(90dvh, 800px);
+  overflow-y: auto;
+  padding: 22px;
+  box-shadow: 0 24px 100px #0008;
+}
+[data-slot="dialog-overlay"] {
+  background: #0009;
+}
+.draft-dialog form {
+  display: grid;
+  gap: 10px;
+}
+.draft-dialog-heading,
+.draft-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.draft-dialog [data-slot="dialog-title"] {
+  font-size: 18px;
+  line-height: 1.3;
+}
+.draft-dialog [data-slot="dialog-description"] {
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.draft-dialog [data-slot="label"] {
+  margin-top: 6px;
+}
+.draft-dialog [data-slot="input"],
+.draft-dialog [data-slot="textarea"] {
+  font-size: 13px;
+  background: var(--panel);
+}
+.draft-dialog [data-slot="textarea"] {
+  min-height: 140px;
+  resize: vertical;
+}
+.draft-dialog-footer {
+  margin-top: 8px;
+  color: var(--metadata);
+  font-size: 12px;
+}
+@media (max-width: 520px) {
+  .draft-dialog-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }

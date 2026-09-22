@@ -14,12 +14,6 @@ import { draftTask, waitingTask } from "../server/testing/fixtures";
 import App from "./App";
 import type { WorkspaceApi } from "./tasks/api";
 
-HTMLDialogElement.prototype.showModal = function () {
-  this.setAttribute("open", "");
-};
-HTMLDialogElement.prototype.close = function () {
-  this.removeAttribute("open");
-};
 const task = draftTask();
 const second = {
   ...waitingTask(),
@@ -240,7 +234,7 @@ it("closes the draft dialog with Escape without submitting", async () => {
   render(<App api={boundary} />);
   await screen.findByRole("heading", { name: "Draft" });
   await user.click(screen.getByRole("button", { name: "New task" }));
-  const opener = screen.getByRole("button", { name: "New task" });
+  const opener = screen.getByRole("button", { name: "New task", hidden: true });
   expect(
     screen.getByRole("dialog", { name: "Submit a draft" }),
   ).toBeInTheDocument();
