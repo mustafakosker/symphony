@@ -131,6 +131,13 @@ function parseSnapshot(value: unknown): Snapshot {
   return { base64, sha256 };
 }
 
+function hasSupportedInitialAction(review: Review, response: string): boolean {
+  const line = response.split('\n', 1)[0];
+  return review.kind === 'question'
+    ? /^action:[ \t]*answer[ \t]*$/.test(line)
+    : /^action:[ \t]*(?:approve|reject)?[ \t]*$/.test(line);
+}
+
 export function parseRecord(value: unknown): RequestRecord {
   const v = requiredObject(value, 'record');
   if (v.schemaVersion !== 1) throw new Error('record.schemaVersion must be 1');
@@ -143,6 +150,7 @@ export function parseRecord(value: unknown): RequestRecord {
   const prefix = text(v.prefix, 'record.prefix');
   const initialResponse = text(v.initialResponse, 'record.initialResponse');
   if (!prefix.endsWith('## Your response\n')) throw new Error('record.prefix must end at the response heading');
+  if (!hasSupportedInitialAction(binding.review, initialResponse)) throw new Error('record.initialResponse has an unsupported action');
   const instructionHeading = prefix.lastIndexOf('## Instructions\n');
   if (instructionHeading < 0) throw new Error('record.prefix must include instructions');
   const instructions = prefix.slice(instructionHeading + '## Instructions\n'.length).split('\n');

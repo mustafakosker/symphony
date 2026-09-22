@@ -145,4 +145,11 @@ describe('file review documents', () => {
       'Allowed actions: `action: answer` or `action: retry`.') })).toThrow();
     expect(parseRecord({ ...record, initialResponse: 'action: answer\n\n' })).toMatchObject({ phase: 'issued' });
   });
+
+  it('resets an unsupported carried action while preserving its response body', () => {
+    const task = questionTask();
+    const record = makeRequest(task, task.reviews[0], crypto.randomUUID(), null, 'action: retry\n\nKeep this invalid body.');
+    expect(record.initialResponse).toBe('action: answer\n\nKeep this invalid body.');
+    expect(() => parseRecord({ ...record, initialResponse: 'action: retry\n\nKeep this invalid body.' })).toThrow();
+  });
 });

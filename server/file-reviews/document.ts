@@ -26,6 +26,17 @@ function materialsFor(review: Review, token: string): Material[] {
   return review.artifacts.map(ref => ({ ref: structuredClone(ref), filename: `materials/${token}/${ref.id}.v${ref.version}.bin` }));
 }
 
+function initialResponse(review: Review, response?: string): string {
+  const fallback = review.kind === 'question' ? 'action: answer' : 'action: ';
+  if (response === undefined) return `${fallback}\n\n`;
+  const [line, ...bodyLines] = response.split('\n');
+  const supported = review.kind === 'question'
+    ? /^action:[ \t]*answer[ \t]*$/.test(line)
+    : /^action:[ \t]*(?:approve|reject)?[ \t]*$/.test(line);
+  if (supported) return response;
+  return `${fallback}\n${bodyLines.length ? bodyLines.join('\n') : '\n'}`;
+}
+
 function prefix(task: Task, review: Review, basename: string, materials: Material[], workflow: Workflow | null): string {
   const lines = [`# ${task.title}`, ''];
   if (review.kind === 'question') {
@@ -60,10 +71,10 @@ export function makeRequest(task: Task, review: Review, token: string,
   const basename = `${slug(task.title)}-${token.toLowerCase()}`;
   const materials = materialsFor(binding.review, token);
   const immutablePrefix = prefix(task, binding.review, basename, materials, binding.workflow);
-  const initialResponse = response ?? (binding.review.kind === 'question' ? 'action: answer\n\n' : 'action: \n\n');
-  if (Buffer.byteLength(immutablePrefix + initialResponse, 'utf8') > MAX_BYTES)
+  const initial = initialResponse(binding.review, response);
+  if (Buffer.byteLength(immutablePrefix + initial, 'utf8') > MAX_BYTES)
     throw new Error('Review document exceeds 1 MiB; use the UI to respond');
-  return { schemaVersion: 1, token, basename, binding, prefix: immutablePrefix, initialResponse, materials, predecessor,
+  return { schemaVersion: 1, token, basename, binding, prefix: immutablePrefix, initialResponse: initial, materials, predecessor,
     phase: 'issued', publication: 'pending', snapshot: null, command: null, outcome: null, receiptPublished: false };
 }
 
