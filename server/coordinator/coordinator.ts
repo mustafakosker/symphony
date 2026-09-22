@@ -276,7 +276,9 @@ export function createCoordinator({ store, intake, registry, runner, settings, r
       const resolution = preparedRun?.result?.artifacts.find(ref => ref.id === 'repository-refs');
       const prepare = mcp.length > 0 && !resolution;
       const actualStep = prepare ? resolutionStep(step, mcp) : step.id === '$triage'
-        ? { ...step, instructions: `${step.instructions}\nConfigured project choices: ${JSON.stringify(registry.projects.map(project => ({ id: project.id, names: project.names })))}. If the draft does not identify one project unambiguously, return needs_human with the choices; do not invent a project ID.` }
+        ? { ...step, instructions: `${step.instructions}\n${registry.projects.length
+          ? `Configured project choices: ${JSON.stringify(registry.projects.map(project => ({ id: project.id, names: project.names })))}. If the draft does not identify one project unambiguously, return needs_human with the choices; do not invent a project ID.`
+          : 'No projects are configured. Use projectId: null and repositories: [] for all steps. Propose a repository-free workflow; do not ask the human to select a project. If the idea requires repository access, explain the missing access instead of inventing it.'}` }
         : step;
       const role = registry.roles.find(item => item.role === actualStep.role);
       if (!role || !exactActions(actualStep, role)) throw new Error(`Unsupported action profile for ${actualStep.role}`);

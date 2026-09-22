@@ -112,7 +112,7 @@ export function createCodexRunner(settings: Settings, launchOverride?: LaunchOve
     catch (error) { await stdoutLog.close(); throw error; }
     const logs = { stdout: stdoutLog, stderr: stderrLog };
     const args = [...prefix, '-a','never','-p',cliProfile,'exec',
-      '-s',sandbox,'--json','--output-schema',assignment.schemaPath,
+      '-s',sandbox,'--skip-git-repo-check','--json','--output-schema',assignment.schemaPath,
       '--output-last-message',finalPath,'-C',cwd,
       ...(sandbox === 'workspace-write' ? [...new Set([...(assignment.repositoryAccess ?? []).flatMap(item => item.checkoutPath ? [item.checkoutPath] : []), outputDir])]
         .filter(path => path !== cwd).flatMap(path => ['--add-dir', path]) : []), '-'];

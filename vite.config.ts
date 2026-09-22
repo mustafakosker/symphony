@@ -7,6 +7,6 @@ export default defineConfig({
     proxy: { "/api": { target: `http://127.0.0.1:${process.env.SYMPHONY_API_PORT ?? "4317"}`, changeOrigin: false } },
   },
   test: {
-    exclude: [...configDefaults.exclude, ".superpowers/**", "dist-server/**"],
+    exclude: [...configDefaults.exclude, ".superpowers/**", ".symphony-local/**", "dist-server/**"],
   },
 });

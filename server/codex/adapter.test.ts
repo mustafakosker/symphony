@@ -83,6 +83,13 @@ it('probes fake CLI capabilities without starting agent work', async () => {
   expect((await runner.probe()).version).toBe('0.fake.1');
 });
 
+it('allows coordinator work directories outside Git repositories', async () => {
+  const { runner, assignment, cwd } = await setup('success');
+  await (await runner.start(assignment, () => {})).completion;
+  const args = JSON.parse(await readFile(join(cwd, 'captured-args.json'), 'utf8'));
+  expect(args).toContain('--skip-git-repo-check');
+});
+
 it('returns a structured question for a human checkpoint', async () => {
   const { runner, assignment } = await setup('question');
   const exit = await (await runner.start(assignment, () => {})).completion;

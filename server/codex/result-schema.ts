@@ -8,30 +8,33 @@ const artifact = { type: 'object', additionalProperties: false,
   properties: { id: string, version: integer, digest: string, path: string } };
 const agentStep = { type: 'object', additionalProperties: false,
   required: ['kind','id','title','role','instructions','inputs','repositories','actions','outputs','checks'],
-  properties: { kind: { const: 'agent' }, id: string, title: string,
-    role: { enum: ['triage','researcher','prd-writer','implementer','reviewer'] },
+  properties: { kind: { type: 'string', const: 'agent' }, id: string, title: string,
+    role: { type: 'string', enum: ['triage','researcher','prd-writer','implementer','reviewer'] },
     instructions: string, inputs: { type: 'array', items: artifact }, repositories: stringArray,
-    actions: { type: 'array', items: { enum: ['read','write-local','open-pr','merge','deploy'] } },
+    actions: { type: 'array', items: { type: 'string', enum: ['read','write-local','open-pr','merge','deploy'] } },
     outputs: stringArray, checks: stringArray } };
 const humanStep = { type: 'object', additionalProperties: false,
   required: ['kind','id','title','producerStepId','artifactIds','allowsStepId'],
-  properties: { kind: { const: 'human' }, id: string, title: string,
+  properties: { kind: { type: 'string', const: 'human' }, id: string, title: string,
     producerStepId: string, artifactIds: stringArray, allowsStepId: { type: ['string','null'] } } };
 const workflow = { type: 'object', additionalProperties: false,
   required: ['version','steps','completionChecks'], properties: { version: integer,
-    steps: { type: 'array', items: { oneOf: [agentStep, humanStep] } }, completionChecks: stringArray } };
+    steps: { type: 'array', items: { anyOf: [agentStep, humanStep] } }, completionChecks: stringArray } };
 const base = { taskId: string, attemptId: string, summary: string,
   artifacts: { type: 'array', items: artifact } };
 const variant = (kind: string, properties: Record<string, unknown>) => ({ type: 'object',
   additionalProperties: false, required: [...Object.keys(base), 'kind', ...Object.keys(properties)],
-  properties: { ...base, kind: { const: kind }, ...properties } });
+  properties: { ...base, kind: { type: 'string', const: kind }, ...properties } });
 export const agentResultSchema = { $schema: 'http://json-schema.org/draft-07/schema#',
-  oneOf: [variant('completed', { evidence: { type: 'object', additionalProperties: string } }),
+  type: 'object', additionalProperties: false, required: ['result'], properties: { result: {
+  anyOf: [variant('completed', { evidence: { type: 'array', items: {
+    type: 'object', additionalProperties: false, required: ['id', 'text'], properties: { id: string, text: string },
+  } } }),
     variant('needs_human', { question: string, checkpoint: string }),
     variant('propose_workflow_change', { workflow, reason: string, title: string, taskType: string,
       projectId: { type: ['string','null'] } }),
     variant('blocked', { reason: string }),
-    variant('failed', { reason: string, retryable: { type: 'boolean' } })] };
+    variant('failed', { reason: string, retryable: { type: 'boolean' } })] } } };
 
 export async function writeResultSchema(path: string): Promise<void> {
   await writeFile(path, JSON.stringify(agentResultSchema), { flag: 'wx', mode: 0o600 });
@@ -63,6 +66,17 @@ const workflowValid = (value: unknown): value is Workflow => obj(value) &&
   Array.isArray(value.steps) && value.steps.every(stepValid) && strings(value.completionChecks);
 
 export function parseAgentResult(value: unknown): AgentResult {
+  if (obj(value) && exact(value, ['result']) && obj(value.result)) {
+    value = value.result;
+    if (obj(value) && value.kind === 'completed' && Array.isArray(value.evidence)) {
+      const entries = value.evidence;
+      if (!entries.every(item => obj(item) && exact(item, ['id', 'text']) &&
+          typeof item.id === 'string' && typeof item.text === 'string') ||
+          new Set(entries.map(item => item.id)).size !== entries.length)
+        throw new Error('Invalid or duplicate evidence entries');
+      value = { ...value, evidence: Object.fromEntries(entries.map(item => [item.id, item.text])) };
+    }
+  }
   if (!obj(value) || !['taskId','attemptId','summary'].every(key => typeof value[key] === 'string') ||
       !Array.isArray(value.artifacts) || !value.artifacts.every(artifactValid)) throw new Error('Invalid final result envelope');
   const common = ['taskId','attemptId','summary','artifacts','kind'];

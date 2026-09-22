@@ -578,6 +578,16 @@ it('gives triage the configured project choices while allowing an unmatched draf
   expect(control.starts[0].step.instructions).toContain('needs_human');
 });
 
+it('instructs triage to use a repository-free workflow when no projects exist', async () => {
+  const { store, control, coordinator } = await setup();
+  await store.create(draftTask(), 'draft');
+  await coordinator.tick(new Date('2026-09-21T12:00:00Z'));
+  const instructions = control.starts[0].step.instructions;
+  expect(instructions).toContain('projectId: null');
+  expect(instructions).toContain('repositories: []');
+  expect(instructions).not.toContain('return needs_human with the choices');
+});
+
 it.each(['pause', 'cancel'] as const)('preserves an unconfirmed %s barrier across restart until reconciliation', async kind => {
   const { store, registry, settings, intake, control } = await setup();
   const task = await store.create(draftTask(), 'create');
