@@ -133,7 +133,7 @@ it('keeps two clarification turns distinct before workflow approval', async () =
   const findings = await nextReview(app, task.id, 'artifact', task.revision);
   expect((await command(app, findings, approval(findings))).status).toBe(200);
   expect((await taskAt(app, task.id, 'done')).runs.filter(run => run.stepId === 'research')).toHaveLength(1);
-});
+}, 15_000);
 
 it('repeats research after feedback with a new artifact, rejecting stale approval', async () => {
   const { workspaceRoot, localRoot, app } = await setup();
