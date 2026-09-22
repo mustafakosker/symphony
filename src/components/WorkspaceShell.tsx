@@ -60,7 +60,7 @@ export default function WorkspaceShell({ tasks, filter, task, connected, coordin
         <Button variant="ghost" size="icon" aria-label="About this workspace" onClick={() => setHelp(value => !value)}><CircleHelp size={17} /></Button>
       </header>
       {help && <div className="workspace-help" role="note">
-        <p><strong>Task workspace.</strong> Add a Markdown draft here or place one in OneDrive. The coordinator picks it up, runs workflow steps, and pauses for your reviews in this workspace.</p>
+        <p><strong>Task workspace.</strong> Submit a Markdown draft here. The coordinator picks it up, runs workflow steps, and pauses for your reviews in this workspace.</p>
         <Button variant="ghost" size="icon-sm" aria-label="Close workspace information" onClick={() => setHelp(false)}><X size={15} /></Button>
       </div>}
       <main className="workspace-main">

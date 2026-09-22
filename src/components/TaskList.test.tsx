@@ -34,6 +34,12 @@ it("prevents a new task while submission is unavailable", () => {
   expect(screen.getByRole("button", { name: "New task" })).toBeDisabled();
 });
 
+it("counts tasks visible in the current filter", () => {
+  render(<TaskList tasks={[draftTask(), waitingTask()]} filter="review" query="" selectedId={null}
+    loading={false} canSubmit onQuery={vi.fn()} onSelect={vi.fn()} onNew={vi.fn()} />);
+  expect(screen.getByLabelText("1 task")).toHaveTextContent("1");
+});
+
 it("forwards search input and restores focus to a returning row", async () => {
   const task = draftTask();
   const onQuery = vi.fn();

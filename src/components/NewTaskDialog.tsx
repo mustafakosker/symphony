@@ -151,7 +151,7 @@ export default function NewTaskDialog({
             </p>
           )}
           <div className="draft-dialog-footer">
-            <span>Your draft will enter OneDrive intake after submission.</span>
+            <span>The coordinator will pick up your submitted draft.</span>
             <Button type="submit" disabled={busy || !canSubmit}>
               Submit draft <ArrowRight size={15} />
             </Button>

@@ -16,6 +16,7 @@ await writeFile(join(workspaceRoot, 'roles/roles.json'), JSON.stringify({ roles:
   { role: 'researcher', instructions: 'FAKE research', skills: [], cliProfile: 'fake', actions: ['read'] },
 ] }));
 const port = Number(process.env.SYMPHONY_PREVIEW_PORT ?? 4321);
+const emptyPreview = process.env.SYMPHONY_PREVIEW_EMPTY === '1';
 const configPath = join(root, 'config.json');
 await writeFile(configPath, JSON.stringify({ workspaceRoot, localRoot, codexBinary: process.execPath,
   port, allowedOrigin: `http://127.0.0.1:${port}`, scanMs: 100, stableMs: 100, stopGraceMs: 200 }));
@@ -38,7 +39,7 @@ const workflowTask = makeTask('Workflow approval', 'waiting-for-human');
 workflowTask.proposedWorkflow = workflow;
 workflowTask.reviews = [{ id: 'workflow-review', kind: 'workflow', workflowVersion: 1, stepId: '$triage',
   artifacts: [], prompt: 'Approve this fake research workflow?', answer: null, decision: null }];
-await store.create(workflowTask, 'seed-workflow');
+if (!emptyPreview) await store.create(workflowTask, 'seed-workflow');
 
 const revisionTask = makeTask('FAKE Workflow revision over v1', 'waiting-for-human');
 revisionTask.workflow = structuredClone(workflow);
@@ -51,19 +52,20 @@ revisionTask.proposedWorkflow = { version: 2, completionChecks: ['revised-findin
 ] };
 revisionTask.reviews = [{ id: 'revision-review', kind: 'workflow', workflowVersion: 2, stepId: 'research',
   artifacts: [], prompt: 'Review the fake changed scope and completion conditions.', answer: null, decision: null }];
-await store.create(revisionTask, 'seed-revision');
+if (!emptyPreview) await store.create(revisionTask, 'seed-revision');
 
 const questionTask = makeTask('Question handoff', 'waiting-for-human');
 questionTask.reviews = [{ id: 'question-review', kind: 'question', workflowVersion: null, stepId: '$triage',
   artifacts: [], prompt: 'Which option should the fake agent use?', answer: null, decision: null }];
-await store.create(questionTask, 'seed-question');
+if (!emptyPreview) await store.create(questionTask, 'seed-question');
 
 const artifactTask = makeTask('Artifact approval', 'queued');
 artifactTask.workflow = workflow;
 artifactTask.currentStepId = 'research';
-const bytes = Buffer.from('# Fake findings\n\nThis is a disposable preview artifact.\n');
+const bytes = Buffer.from('# Fake findings\n\nThis is a disposable preview artifact.\n' +
+  Array.from({ length: 40 }, (_, index) => `\nFAKE finding ${index + 1}: ${'Long content '.repeat(8)}`).join(''));
 const ref = { id: 'findings', version: 1, digest: createHash('sha256').update(bytes).digest('hex'), path: 'artifacts/findings.1.bin' };
-await store.create(artifactTask, 'seed-artifact');
+if (!emptyPreview) await store.create(artifactTask, 'seed-artifact');
 
 const blockedTask = makeTask('Blocked reconciliation', 'blocked');
 blockedTask.blockedReason = 'Fake uncertain external effect; operator reconciliation required';
@@ -71,17 +73,45 @@ blockedTask.runs = [{ id: randomUUID(), stepId: '$triage', workflowVersion: null
   phase: 'uncertain', pid: 99999, processStartedAt: blockedTask.createdAt, runtimeVersion: 'fake-preview',
   inputRefs: [], repos: [], startedAt: blockedTask.createdAt, endedAt: blockedTask.createdAt,
   exitCode: null, retryCount: 0, nextRetryAt: null, result: null }];
-await store.create(blockedTask, 'seed-blocked');
+if (!emptyPreview) await store.create(blockedTask, 'seed-blocked');
 
 const longTask = makeTask('Long running fake task');
-await store.create(longTask, 'seed-long');
+if (!emptyPreview) await store.create(longTask, 'seed-long');
+const closedTask = makeTask('FAKE completed research', 'waiting-for-human');
+closedTask.idea = 'Completed fake work remains available for inspection.';
+closedTask.workflow = { ...structuredClone(workflow), steps: [workflow.steps[0], { ...workflow.steps[1], artifactIds: [] }] };
+closedTask.currentStepId = 'findings';
+closedTask.completedStepIds = ['research'];
+closedTask.generation = 1;
+closedTask.runs = [{ id: randomUUID(), stepId: 'research', workflowVersion: 1, generation: 1,
+  phase: 'ended', pid: process.pid, processStartedAt: closedTask.createdAt, runtimeVersion: 'fake-preview',
+  inputRefs: [], repos: [], startedAt: closedTask.createdAt, endedAt: closedTask.createdAt,
+  exitCode: 0, retryCount: 0, nextRetryAt: null,
+  result: { kind: 'completed', taskId: closedTask.id, attemptId: '', summary: 'FAKE research completed',
+    artifacts: [], evidence: { findings: 'FAKE evidence' } } }];
+closedTask.runs[0].result.attemptId = closedTask.runs[0].id;
+closedTask.reviews = [{ id: 'closed-review', kind: 'artifact', workflowVersion: 1, stepId: 'findings',
+  artifacts: [], prompt: 'FAKE final research review', answer: null, decision: null }];
+if (!emptyPreview) {
+  await store.create(closedTask, 'seed-closed');
+  await store.apply(closedTask.id, 1, 'seed-closed-approval', { kind: 'human', command: {
+    requestId: 'seed-closed-approval', taskId: closedTask.id, expectedRevision: 1,
+    action: { kind: 'approve', reviewId: 'closed-review', artifactDigests: [] } } });
+}
+const longContentTask = makeTask('FAKE ' + 'Long task title '.repeat(12), 'waiting-for-human');
+longContentTask.source = 'drafts/' + 'long-source-name-'.repeat(16) + '.md';
+longContentTask.reviews = [{ id: 'long-question', kind: 'question', workflowVersion: null,
+  stepId: '$triage', artifacts: [], prompt: 'First line\nSecond line\n' + 'Details '.repeat(80),
+  answer: null, decision: null }];
+if (!emptyPreview) await store.create(longContentTask, 'seed-long-content');
 const runner = { async probe() { return { version: 'fake-preview-only' }; },
   async start(assignment) {
     let finish;
     let timer;
     const completion = new Promise(done => { finish = done; });
     if (assignment.step.id === 'research') await writeFile(join(assignment.outputDir, 'findings.md'), bytes);
-    await writeFile(join(assignment.outputDir, 'stdout.log'), `FAKE ${assignment.step.id}: inspecting ${assignment.task.title}\n`);
+    await writeFile(join(assignment.outputDir, 'stdout.log'), `FAKE ${assignment.step.id}: inspecting ${assignment.task.title}\n` +
+      Array.from({ length: 40 }, (_, index) => `FAKE log line ${index + 1}: ${'output '.repeat(12)}\n`).join(''));
     const heading = assignment.task.idea.match(/^#\s+(.+)$/m)?.[1]?.trim();
     const result = assignment.step.id === '$triage'
       ? { kind: 'propose_workflow_change', taskId: assignment.task.id, attemptId: assignment.run.id,
