@@ -2,7 +2,7 @@
 
 ## Status and agreed intent
 
-The user approved this conversational design on 2026-09-22. This document records that design for written review; implementation planning and implementation have not been approved yet.
+The user approved the conversational design and this written specification on 2026-09-22. Implementation planning is authorized. Implementation awaits review of the resulting plan and selection of its execution method.
 
 The user wants an experience like Xirp's embedded agent terminals and session switching, using the actual Codex CLI interface. The initial purpose is to start with an idea, discuss it with Codex using a selected project's code, and turn the agreed brief into a Symphony task. For this release the project is fixed to Symphony at `/Users/mustafakosker/projects/symphony`, and sessions are read-only.
 
@@ -196,4 +196,4 @@ Fake tests do not prove real host confinement. If authentication or the real bou
 
 ## Review handoff
 
-Review this written specification before implementation planning. Once the user approves it, use the writing-plans skill to produce a concrete plan covering the native terminal, snapshot/session lifecycle, verified read-only boundary, task handoff, and validation. Implementation starts only after that plan has been reviewed and its execution method selected.
+The written specification is approved. The implementation plan must cover the native terminal, snapshot/session lifecycle, verified read-only boundary, task handoff, and validation. Implementation starts only after that plan has been reviewed and its execution method selected.
