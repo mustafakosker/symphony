@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import type {
   CatalogView,
+  CatalogSnapshot,
+  SnapshotLimits,
   DraftText,
   ResolutionChoices,
   ResolutionPreview,
@@ -64,6 +66,8 @@ export async function createProjectBinding(deps: {
   snapshots: SnapshotService;
   briefs: BriefService;
   localRoot: string;
+  limits?: Pick<SnapshotLimits, "entries" | "totalBytes">;
+  refreshCatalog?: () => Promise<CatalogSnapshot>;
 }): Promise<BindingService> {
   const root = await confinedPath(deps.localRoot, "projects/bindings");
   await mkdir(root, { recursive: true });
@@ -115,7 +119,10 @@ export async function createProjectBinding(deps: {
         entries += m.entries.length;
         bytes += m.totalBytes;
       }
-      if (entries > 100000 || bytes > 1073741824)
+      if (
+        entries > (deps.limits?.entries ?? 100000) ||
+        bytes > (deps.limits?.totalBytes ?? 1073741824)
+      )
         throw new BoundaryError(
           "invalid",
           "Combined project snapshots exceed task limits",
@@ -175,7 +182,9 @@ export async function createProjectBinding(deps: {
             );
           return prior.status;
         }
-        const catalog = await deps.catalog.read(),
+        const catalog = await (deps.refreshCatalog
+            ? deps.refreshCatalog()
+            : deps.catalog.read()),
           preview = previewResolution(input.text, catalog, input.choices);
         if (
           preview.revision !== input.previewRevision ||

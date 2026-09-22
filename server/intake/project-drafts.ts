@@ -202,8 +202,8 @@ export async function createProjectDrafts(deps: {
           title:
             item.preview.generation === "unset"
               ? item.filename.slice(0, -3)
-              : (item.draft?.text.title ??
-                deriveDraftText(item.markdown, item.filename).title),
+              : item.draft?.text.title.trim() ||
+                deriveDraftText(item.markdown, item.filename).title,
           markdown: item.markdown,
           context: item.operationId
             ? await deps.binding.getContext(item.operationId)

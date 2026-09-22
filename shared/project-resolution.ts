@@ -65,6 +65,7 @@ export function resolveProjects(
     message: string,
     matchKey: string | null = null,
   ) => result.problems.push({ code, message, matchKey });
+  if (catalog.state === "unset") return result;
   if (catalog.state === "unavailable") {
     problem("root-unavailable", "Projects root is unavailable");
     return result;

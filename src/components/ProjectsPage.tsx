@@ -165,6 +165,7 @@ function ProjectEditor({
   onRefresh(): Promise<void>;
 }) {
   const [detail, setDetail] = useState<ProjectDetail | null>(null),
+    [editRevision, setEditRevision] = useState(""),
     [aliases, setAliases] = useState(""),
     [name, setName] = useState(""),
     [ref, setRef] = useState(""),
@@ -183,6 +184,7 @@ function ProjectEditor({
       .then((d) => {
         if (c.signal.aborted) return;
         setDetail(d);
+        setEditRevision(d.project.revision);
         setAliases(d.project.aliases.join(", "));
         setName(d.project.displayName);
         setRef(d.project.defaultRef ?? "");
@@ -254,6 +256,19 @@ function ProjectEditor({
           <option key={b}>{b}</option>
         ))}
       </select>
+      {p.revision !== editRevision && (
+        <div>
+          <details>
+            <summary>Compare current saved project settings</summary>
+            <p>Display name: {p.displayName}</p>
+            <p>Aliases: {p.aliases.join(", ") || "None"}</p>
+            <p>Default branch: {p.defaultRef ?? "None"}</p>
+          </details>
+          <Button variant="outline" onClick={() => setEditRevision(p.revision)}>
+            Use current project settings as edit base
+          </Button>
+        </div>
+      )}
       <div className="project-actions">
         <Button
           variant="outline"
@@ -262,7 +277,7 @@ function ProjectEditor({
             void act(async () => {
               const project = await api.edit({
                 projectId: id,
-                expectedRevision: p.revision,
+                expectedRevision: editRevision,
                 requestId: crypto.randomUUID(),
                 displayName: name,
                 aliases: aliases
@@ -272,6 +287,7 @@ function ProjectEditor({
                 defaultRef: ref || null,
               });
               setDetail({ ...detail, project });
+              setEditRevision(project.revision);
             })
           }
         >
@@ -359,7 +375,7 @@ function ProjectEditor({
           onClick={() =>
             setEditor({
               expectedVersion: current?.version ?? null,
-              source: snapshot!,
+              source: current?.source ?? snapshot!,
               report: current?.report ?? {
                 format: "source-report-v1",
                 text: "",

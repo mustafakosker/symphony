@@ -197,3 +197,38 @@ it("canonicalizes a configured alias once and detects later redirection", async 
     projectsRoot: f.root,
   });
 });
+it("retires a failed config replacement without poisoning reads or applying it later", async () => {
+  const f = await setup();
+  const before = await f.service.save({
+    projectsRoot: f.root,
+    expectedRevision: (await f.service.read()).revision,
+    requestId: "initial",
+  });
+  const original = atomic.writeAtomic;
+  vi.spyOn(atomic, "writeAtomic").mockImplementation(async (path, bytes) => {
+    if (path === f.configPath)
+      throw Object.assign(new Error("Permission denied"), { code: "EACCES" });
+    await original(path, bytes);
+  });
+  await expect(
+    f.service.save({
+      projectsRoot: null,
+      expectedRevision: before.revision,
+      requestId: "failed",
+    }),
+  ).rejects.toMatchObject({ code: "EACCES" });
+  expect(await f.service.read()).toEqual(before);
+  vi.restoreAllMocks();
+  const restarted = await openProjectSettings(f.configPath, f.settings);
+  expect(await restarted.read()).toEqual(before);
+  expect(JSON.parse(await readFile(f.configPath, "utf8")).projectsRoot).toBe(
+    f.root,
+  );
+  expect(
+    await restarted.save({
+      projectsRoot: null,
+      expectedRevision: before.revision,
+      requestId: "explicit-retry",
+    }),
+  ).toMatchObject({ state: "unset" });
+});

@@ -225,7 +225,18 @@ export async function openProjectSettings(
         };
         state.intent = intent;
         await writeAtomic(statePath, serialize(state));
-        await writeAtomic(configPath, bytes);
+        try {
+          await writeAtomic(configPath, bytes);
+        } catch (error) {
+          // A reported failure before replacement is not a crash-recovery request.
+          // Leave an intent only if the write landed (or its outcome is unknown).
+          const current = await document().catch(() => null);
+          if (current?.revision === intent.before) {
+            state.intent = null;
+            await writeAtomic(statePath, serialize(state));
+          }
+          throw error;
+        }
         const recovered = await load();
         return result(recovered.state, recovered.doc.revision);
       }),

@@ -70,22 +70,52 @@ export async function openProjectServices(
       snapshots,
       localRoot: host.localRoot,
     });
+  let discoveryQueue: Promise<unknown> = Promise.resolve();
+  const refreshCatalog = () => {
+    const next = discoveryQueue
+      .catch(() => {})
+      .then(async () => {
+        let root = await settings.read();
+        let discovery = {
+          entries: [],
+          scannedAt: new Date().toISOString(),
+        } as Awaited<ReturnType<typeof scanRoot>>;
+        if (root.state === "ready") {
+          try {
+            discovery = await scanRoot(root, {
+              timeoutMs: host.projectGitTimeoutMs,
+            });
+          } catch (error) {
+            root = {
+              ...root,
+              state: "unavailable",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Projects root unavailable",
+            };
+          }
+        }
+        return catalog.reconcile(root, discovery);
+      });
+    discoveryQueue = next;
+    return next;
+  };
   const binding = await createProjectBinding({
     catalog,
     snapshots,
     briefs,
     localRoot: host.localRoot,
+    limits: snapshotLimits(host),
+    refreshCatalog,
   });
   const resolve = async (text: DraftText, choices: ResolutionChoices) => {
-    const root = await settings.read(),
-      view = await catalog.read();
+    const view = await refreshCatalog();
     return previewResolution(
       text,
       {
         ...view,
-        generation: root.state === "unset" ? "unset" : root.generation,
-        state: root.state,
-        ...(root.generation !== view.generation ? { projects: [] } : {}),
+        generation: view.state === "unset" ? "unset" : view.generation,
       },
       choices,
     );
@@ -219,19 +249,10 @@ export async function openProjectServices(
           continue;
         try {
           if (op.status.kind === "scan") {
-            const root = await settings.read();
-            let discovery = {
-              entries: [],
-              scannedAt: new Date().toISOString(),
-            } as Awaited<ReturnType<typeof scanRoot>>;
-            if (root.state === "ready")
-              discovery = await scanRoot(root, {
-                timeoutMs: host.projectGitTimeoutMs,
-              });
-            await catalog.reconcile(root, discovery);
+            const view = await refreshCatalog();
             op.status.state = "complete";
             op.status.message =
-              root.state === "unavailable"
+              view.state === "unavailable"
                 ? "Projects root unavailable"
                 : "Project scan complete";
           } else if (op.project && op.ref) {
@@ -392,10 +413,7 @@ export async function openProjectServices(
         : [],
   };
   let lastError: string | null = null;
-  // Catalog startup remains useful even when the configured source root is unavailable.
-  const root = await settings.read(),
-    view = await catalog.read();
-  if (root.generation !== view.generation || root.state !== view.state)
-    await api.rescan(`startup:${root.generation}:${root.state}:${Date.now()}`);
+  // Rescan unchanged roots too: external maintenance may add, remove, or replace repositories.
+  await refreshCatalog();
   return api;
 }
