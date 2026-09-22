@@ -1,31 +1,308 @@
-import type { IncomingMessage,ServerResponse } from 'node:http';import type { ProjectServices } from '../projects/service.js';import type { DraftText,ResolutionChoices,ProjectDraft } from '../../shared/projects.js';import { exactObject,parseSnapshotRef } from '../../shared/project-validation.js';import { parseSourceReport } from '../../shared/source-report.js';import { BoundaryError } from '../../shared/validate.js';import { readJson } from './access.js';import { readCitation,validateSourceReport } from '../projects/citations.js';
-function body(value:unknown,keys:string[]){try{return exactObject(value,keys);}catch{throw new BoundaryError('invalid','Unexpected or missing request fields');}}
-function text(v:unknown){if(typeof v!=='string'||!v.trim()||v.length>1024*1024)throw new BoundaryError('invalid','Invalid text field');return v;}
-function integer(v:unknown){if(!Number.isSafeInteger(v)||(v as number)<1)throw new BoundaryError('invalid','Invalid version');return v as number;}
-export function parseResolution(value:unknown):{text:DraftText;choices:ResolutionChoices}{const v=body(value,['text','choices']),t=body(v.text,['title','description']),c=body(v.choices,['excludedReferenceIds','ambiguities']);
- if(typeof t.title!=='string'||typeof t.description!=='string'||!Array.isArray(c.excludedReferenceIds)||c.excludedReferenceIds.some(x=>typeof x!=='string')||!c.ambiguities||typeof c.ambiguities!=='object'||Array.isArray(c.ambiguities)||Object.values(c.ambiguities).some(x=>typeof x!=='string'))throw new BoundaryError('invalid','Invalid resolution input');
- return {text:{title:t.title,description:t.description},choices:c as ResolutionChoices};}
-export function parseProjectDraft(value:unknown):ProjectDraft{const v=body(value,['text','choices','selections','previewRevision','catalogRevision']),r=parseResolution({text:v.text,choices:v.choices});if(!Array.isArray(v.selections))throw new BoundaryError('invalid','Invalid project selections');return {...r,previewRevision:text(v.previewRevision),catalogRevision:text(v.catalogRevision),selections:v.selections.map(x=>{const s=body(x,['projectId','ref','briefVersion']);return {projectId:text(s.projectId),ref:text(s.ref),briefVersion:integer(s.briefVersion)};})};}
-function send(res:ServerResponse,value:unknown,status=200){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(value));}
-export async function handleProjectRequest(req:IncomingMessage,res:ServerResponse,url:URL,s:ProjectServices):Promise<boolean>{
- const path=url.pathname,get=req.method==='GET',post=req.method==='POST';const respond=(v:unknown,status=200)=>{send(res,v,status);return true;};
- if(path==='/api/settings/projects'){if(get)return respond(await s.settings.read());if(post){const v=body(await readJson(req),['projectsRoot','expectedRevision','requestId']);if(v.projectsRoot!==null&&typeof v.projectsRoot!=='string')throw new BoundaryError('invalid','Invalid projects root');const saved=await s.settings.save({projectsRoot:v.projectsRoot,expectedRevision:text(v.expectedRevision),requestId:text(v.requestId)});await s.rescan(`root-save:${text(v.requestId)}`);return respond(saved);}}
- if(path==='/api/projects'&&get)return respond(await s.catalog.read());
- if(path==='/api/projects/rescan'&&post){const v=body(await readJson(req),['requestId']);return respond(await s.rescan(text(v.requestId)),202);}
- if(path==='/api/projects/resolve'&&post){const v=parseResolution(await readJson(req));return respond(await s.resolve(v.text,v.choices));}
- if(path==='/api/project-operations'&&get)return respond(await s.operations());
- if(path==='/api/project-submissions'&&get)return respond(await s.draftGate.list());
- let m=path.match(/^\/api\/project-submissions\/([A-Za-z0-9_-]+)(\/resolve)?$/);
- if(m){if(get&&!m[2]){const item=(await s.draftGate.list()).find(i=>i.submissionId===m![1]);if(!item)throw new BoundaryError('missing','Pending submission unavailable');return respond(item);}if(post&&m[2]){const v=body(await readJson(req),['expectedRevision','requestId','projectDraft']);return respond(await s.draftGate.resolveIssue(m[1],integer(v.expectedRevision),parseProjectDraft(v.projectDraft),text(v.requestId)),202);}}
- m=path.match(/^\/api\/project-operations\/([A-Za-z0-9_-]+)$/);if(m&&get)return respond(await s.operation(m[1]));
- m=path.match(/^\/api\/projects\/([A-Za-z0-9_-]+)(?:\/(prepare|verify|briefs(?:\/generate|\/[1-9][0-9]*(?:\/citations\/[A-Za-z0-9_-]+)?)?))?$/);
- if(m){const id=m[1],suffix=m[2];if(!suffix){if(get){const project=await s.catalog.get(id);return respond({project,briefs:await s.briefs.history(id)});}if(post){const v=body(await readJson(req),['expectedRevision','requestId','aliases','displayName','defaultRef']);if(!Array.isArray(v.aliases)||v.aliases.some(a=>typeof a!=='string')||v.defaultRef!==null&&typeof v.defaultRef!=='string')throw new BoundaryError('invalid','Invalid project edit');return respond(await s.catalog.edit({projectId:id,expectedRevision:text(v.expectedRevision),requestId:text(v.requestId),aliases:v.aliases as string[],displayName:text(v.displayName),defaultRef:v.defaultRef as string|null}));}}
-  if(post&&(suffix==='prepare'||suffix==='briefs/generate')){const v=body(await readJson(req),['requestId','ref']);return respond(await (suffix==='prepare'?s.prepare:s.generate)(id,text(v.ref),text(v.requestId)),202);}
-  if(post&&suffix==='verify'){const v=body(await readJson(req),['requestId']);return respond(await s.verify(id,text(v.requestId)),202);}
-  if(post&&suffix==='briefs'){const v=body(await readJson(req),['expectedVersion','requestId','author','source','report']);if(v.author!=='human'&&v.author!=='human-edited')throw new BoundaryError('invalid','Invalid brief author');let source,report;try{source=parseSnapshotRef(v.source);report=parseSourceReport(v.report);}catch{throw new BoundaryError('invalid','Invalid brief content');}return respond(await s.briefs.save({projectId:id,expectedVersion:v.expectedVersion===null?null:integer(v.expectedVersion),requestId:text(v.requestId),author:v.author,source,report}));}
-  if(get&&suffix?.startsWith('briefs/')){const parts=suffix.split('/'),brief=await s.briefs.get(id,integer(Number(parts[1])));return respond(parts[2]==='citations'?await readCitation(brief.report,parts[3],[brief.source],s.snapshots):brief);}
- }
- m=path.match(/^\/api\/tasks\/([A-Za-z0-9_-]+)\/artifacts\/([A-Za-z0-9._-]+)\/(report|citations\/([A-Za-z0-9_-]+))$/);
- if(m&&get){const version=integer(Number(url.searchParams.get('version'))),task=await s.primary.get(m[1]);if(task.schemaVersion!==2)throw new BoundaryError('invalid','Artifact is not a source report');const artifact=task.artifacts.find(a=>a.id===m![2]&&a.version===version);if(!artifact)throw new BoundaryError('missing','Artifact is unavailable');let report;try{report=parseSourceReport(JSON.parse(Buffer.from(await s.primary.readArtifact(task.id,artifact)).toString('utf8')));}catch{throw new BoundaryError('invalid','Artifact is not a valid source report');}const allowed=task.projectContext.projects.map(p=>p.snapshot);await validateSourceReport(report,allowed,s.snapshots,{textBytes:1024*1024,citations:256});return respond(m[3]==='report'?report:await readCitation(report,m[4],allowed,s.snapshots));}
- return false;
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ProjectServices } from "../projects/service.js";
+import type {
+  DraftText,
+  ResolutionChoices,
+  ProjectDraft,
+} from "../../shared/projects.js";
+import {
+  exactObject,
+  parseSnapshotRef,
+} from "../../shared/project-validation.js";
+import { parseSourceReport } from "../../shared/source-report.js";
+import { BoundaryError } from "../../shared/validate.js";
+import { readJson } from "./access.js";
+import { readCitation, validateSourceReport } from "../projects/citations.js";
+function body(value: unknown, keys: string[]) {
+  try {
+    return exactObject(value, keys);
+  } catch {
+    throw new BoundaryError("invalid", "Unexpected or missing request fields");
+  }
+}
+function text(v: unknown) {
+  if (typeof v !== "string" || !v.trim() || v.length > 1024 * 1024)
+    throw new BoundaryError("invalid", "Invalid text field");
+  return v;
+}
+function integer(v: unknown) {
+  if (!Number.isSafeInteger(v) || (v as number) < 1)
+    throw new BoundaryError("invalid", "Invalid version");
+  return v as number;
+}
+export function parseResolution(value: unknown): {
+  text: DraftText;
+  choices: ResolutionChoices;
+} {
+  const v = body(value, ["text", "choices"]),
+    t = body(v.text, ["title", "description"]),
+    c = body(v.choices, ["excludedReferenceIds", "ambiguities"]);
+  if (
+    typeof t.title !== "string" ||
+    typeof t.description !== "string" ||
+    !Array.isArray(c.excludedReferenceIds) ||
+    c.excludedReferenceIds.some((x) => typeof x !== "string") ||
+    !c.ambiguities ||
+    typeof c.ambiguities !== "object" ||
+    Array.isArray(c.ambiguities) ||
+    Object.values(c.ambiguities).some((x) => typeof x !== "string")
+  )
+    throw new BoundaryError("invalid", "Invalid resolution input");
+  return {
+    text: { title: t.title, description: t.description },
+    choices: c as ResolutionChoices,
+  };
+}
+export function parseProjectDraft(value: unknown): ProjectDraft {
+  const v = body(value, [
+      "text",
+      "choices",
+      "selections",
+      "previewRevision",
+      "catalogRevision",
+    ]),
+    r = parseResolution({ text: v.text, choices: v.choices });
+  if (!Array.isArray(v.selections))
+    throw new BoundaryError("invalid", "Invalid project selections");
+  return {
+    ...r,
+    previewRevision: text(v.previewRevision),
+    catalogRevision: text(v.catalogRevision),
+    selections: v.selections.map((x) => {
+      const s = body(x, ["projectId", "ref", "briefVersion"]);
+      return {
+        projectId: text(s.projectId),
+        ref: text(s.ref),
+        briefVersion: integer(s.briefVersion),
+      };
+    }),
+  };
+}
+function send(res: ServerResponse, value: unknown, status = 200) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  res.end(JSON.stringify(value));
+}
+export async function handleProjectRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  s: ProjectServices,
+): Promise<boolean> {
+  const path = url.pathname,
+    get = req.method === "GET",
+    post = req.method === "POST";
+  const respond = (v: unknown, status = 200) => {
+    send(res, v, status);
+    return true;
+  };
+  if (path === "/api/settings/projects") {
+    if (get) return respond(await s.settings.read());
+    if (post) {
+      const v = body(await readJson(req), [
+        "projectsRoot",
+        "expectedRevision",
+        "requestId",
+      ]);
+      if (v.projectsRoot !== null && typeof v.projectsRoot !== "string")
+        throw new BoundaryError("invalid", "Invalid projects root");
+      const saved = await s.settings.save({
+        projectsRoot: v.projectsRoot,
+        expectedRevision: text(v.expectedRevision),
+        requestId: text(v.requestId),
+      });
+      await s.rescan(`root-save:${text(v.requestId)}`);
+      return respond(saved);
+    }
+  }
+  if (path === "/api/projects" && get) return respond(await s.catalog.read());
+  if (path === "/api/projects/rescan" && post) {
+    const v = body(await readJson(req), ["requestId"]);
+    return respond(await s.rescan(text(v.requestId)), 202);
+  }
+  if (path === "/api/projects/resolve" && post) {
+    const v = parseResolution(await readJson(req));
+    return respond(await s.resolve(v.text, v.choices));
+  }
+  if (path === "/api/project-operations" && get)
+    return respond(await s.operations());
+  if (path === "/api/project-submissions" && get)
+    return respond(await s.draftGate.list());
+  const retry = path.match(
+    /^\/api\/project-operations\/([A-Za-z0-9_-]+)\/retry$/,
+  );
+  if (retry && post) {
+    const v = body(await readJson(req), ["requestId"]);
+    return respond(await s.retryOperation(retry[1], text(v.requestId)), 202);
+  }
+  let m = path.match(
+    /^\/api\/project-submissions\/([A-Za-z0-9_-]+)(\/resolve)?$/,
+  );
+  if (m) {
+    if (get && !m[2]) {
+      const item = (await s.draftGate.list()).find(
+        (i) => i.submissionId === m![1],
+      );
+      if (!item)
+        throw new BoundaryError("missing", "Pending submission unavailable");
+      return respond(item);
+    }
+    if (post && m[2]) {
+      const v = body(await readJson(req), [
+        "expectedRevision",
+        "requestId",
+        "projectDraft",
+      ]);
+      return respond(
+        await s.draftGate.resolveIssue(
+          m[1],
+          integer(v.expectedRevision),
+          parseProjectDraft(v.projectDraft),
+          text(v.requestId),
+        ),
+        202,
+      );
+    }
+  }
+  m = path.match(/^\/api\/project-operations\/([A-Za-z0-9_-]+)$/);
+  if (m && get) return respond(await s.operation(m[1]));
+  m = path.match(
+    /^\/api\/projects\/([A-Za-z0-9_-]+)(?:\/(prepare|verify|briefs(?:\/generate|\/[1-9][0-9]*(?:\/citations\/[A-Za-z0-9_-]+)?)?))?$/,
+  );
+  if (m) {
+    const id = m[1],
+      suffix = m[2];
+    if (!suffix) {
+      if (get) {
+        const project = await s.catalog.get(id);
+        return respond({ project, briefs: await s.briefs.history(id) });
+      }
+      if (post) {
+        const v = body(await readJson(req), [
+          "expectedRevision",
+          "requestId",
+          "aliases",
+          "displayName",
+          "defaultRef",
+        ]);
+        if (
+          !Array.isArray(v.aliases) ||
+          v.aliases.some((a) => typeof a !== "string") ||
+          (v.defaultRef !== null && typeof v.defaultRef !== "string")
+        )
+          throw new BoundaryError("invalid", "Invalid project edit");
+        return respond(
+          await s.catalog.edit({
+            projectId: id,
+            expectedRevision: text(v.expectedRevision),
+            requestId: text(v.requestId),
+            aliases: v.aliases as string[],
+            displayName: text(v.displayName),
+            defaultRef: v.defaultRef as string | null,
+          }),
+        );
+      }
+    }
+    if (post && (suffix === "prepare" || suffix === "briefs/generate")) {
+      const v = body(await readJson(req), ["requestId", "ref"]);
+      return respond(
+        await (suffix === "prepare" ? s.prepare : s.generate)(
+          id,
+          text(v.ref),
+          text(v.requestId),
+        ),
+        202,
+      );
+    }
+    if (post && suffix === "verify") {
+      const v = body(await readJson(req), ["requestId"]);
+      return respond(await s.verify(id, text(v.requestId)), 202);
+    }
+    if (post && suffix === "briefs") {
+      const v = body(await readJson(req), [
+        "expectedVersion",
+        "requestId",
+        "author",
+        "source",
+        "report",
+      ]);
+      if (v.author !== "human" && v.author !== "human-edited")
+        throw new BoundaryError("invalid", "Invalid brief author");
+      let source, report;
+      try {
+        source = parseSnapshotRef(v.source);
+        report = parseSourceReport(v.report);
+      } catch {
+        throw new BoundaryError("invalid", "Invalid brief content");
+      }
+      return respond(
+        await s.briefs.save({
+          projectId: id,
+          expectedVersion:
+            v.expectedVersion === null ? null : integer(v.expectedVersion),
+          requestId: text(v.requestId),
+          author: v.author,
+          source,
+          report,
+        }),
+      );
+    }
+    if (get && suffix?.startsWith("briefs/")) {
+      const parts = suffix.split("/"),
+        brief = await s.briefs.get(id, integer(Number(parts[1])));
+      return respond(
+        parts[2] === "citations"
+          ? await readCitation(
+              brief.report,
+              parts[3],
+              [brief.source],
+              s.snapshots,
+            )
+          : brief,
+      );
+    }
+  }
+  m = path.match(
+    /^\/api\/tasks\/([A-Za-z0-9_-]+)\/artifacts\/([A-Za-z0-9._-]+)\/(report|citations\/([A-Za-z0-9_-]+))$/,
+  );
+  if (m && get) {
+    const version = integer(Number(url.searchParams.get("version"))),
+      task = await s.primary.get(m[1]);
+    if (task.schemaVersion !== 2)
+      throw new BoundaryError("invalid", "Artifact is not a source report");
+    const artifact = task.artifacts.find(
+      (a) => a.id === m![2] && a.version === version,
+    );
+    if (!artifact)
+      throw new BoundaryError("missing", "Artifact is unavailable");
+    let report;
+    try {
+      report = parseSourceReport(
+        JSON.parse(
+          Buffer.from(await s.primary.readArtifact(task.id, artifact)).toString(
+            "utf8",
+          ),
+        ),
+      );
+    } catch {
+      throw new BoundaryError(
+        "invalid",
+        "Artifact is not a valid source report",
+      );
+    }
+    const allowed = task.projectContext.projects.map((p) => p.snapshot);
+    await validateSourceReport(report, allowed, s.snapshots, {
+      textBytes: 1024 * 1024,
+      citations: 256,
+    });
+    return respond(
+      m[3] === "report"
+        ? report
+        : await readCitation(report, m[4], allowed, s.snapshots),
+    );
+  }
+  return false;
 }

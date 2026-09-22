@@ -37,7 +37,7 @@ export default function TaskDetail({ projects=projectApi,task, stale, onCommand 
         <div hidden={tab !== "overview"}><TabsContent value="overview" forceMount>
           {stale && <div className="notice-banner" role="status">Last known task. Reconnecting to the coordinator…</div>}
           {task.blockedReason && <div className="closed-banner"><X size={17} /><div><strong>Blocked</strong><p>{task.blockedReason}</p></div></div>}
-          {pending.map((review, index) => <ReviewPanel key={`${task.id}-${review.id}`} task={task} review={review} disabled={stale || index !== 0} onCommand={onCommand} />)}
+          {pending.map((review, index) => <ReviewPanel projects={projects} key={`${task.id}-${review.id}`} task={task} review={review} disabled={stale || index !== 0} onCommand={onCommand} />)}
           {isClosed(task) && <div className="closed-banner"><Check size={17} /><div><strong>Task {statusLabel(task).toLowerCase()}</strong><p>{task.status === "done" && lastResult?.kind === "completed" ? lastResult.summary : "The task record and partial output remain available for inspection."}</p></div></div>}
           {task.schemaVersion===2&&<TaskProjectContext task={task} api={projects}/>}
           <WorkflowJourney task={task} disabled={stale} onCommand={onCommand} />

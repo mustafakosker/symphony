@@ -18,6 +18,7 @@ import { acquireHostLock } from './store/lock.js';
 import { openStore } from './store/task-store.js';
 
 type TestOnlyInjection = { runner?: Runner;
+  verifyProjectAccess?: (project: import('../shared/projects.js').ProjectRecord, snapshot: import('../shared/projects.js').SnapshotRef) => Promise<void>;
   verifyCapabilities?: (settings: Settings, roles: RoleConfig[], version: string) => Promise<void> };
 type Options = { configPath?: string; buildDir?: string } & TestOnlyInjection;
 export type Application = { address: string; close(): Promise<void> };
@@ -40,7 +41,7 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     releaseLock = await acquireHostLock(settings.localRoot);
     const registry = await loadRegistry(settings.workspaceRoot);
     const store = await openStore(settings.workspaceRoot);
-    projects = await openProjectServices(configPath, settings, store, {registry});
+    projects = await openProjectServices(configPath, settings, store, {registry,verifyAccess:options.verifyProjectAccess});
     const startupIssues = await recoverAttempts(projects.schedulerStore, settings.localRoot);
     if (startupIssues.some(issue => issue.message.includes('could not be persisted'))) throw new Error('Startup recovery could not persist an uncertain run');
     const runner = options.runner ?? createCodexRunner(settings);

@@ -1,29 +1,477 @@
-import BriefReport from './BriefReport';
-import ProjectSubmissions from './ProjectSubmissions';
-import { useEffect,useState } from 'react';import type { BriefCopy,SnapshotRef,SourceReport } from '../../shared/projects';import type { ProjectApi,ProjectDetail,ProjectOperation } from '../projects/api';import { useProjects } from '../projects/useProjects';import { Button } from './ui/button';import { Input } from './ui/input';import { Label } from './ui/label';import { Textarea } from './ui/textarea';
-export default function ProjectsPage({api,onOpenSettings}:{api:ProjectApi;onOpenSettings():void}){const model=useProjects(api),[selected,setSelected]=useState<string|null>(null),[error,setError]=useState('');
- return <section className="project-page"><div className="project-heading"><div><span className="eyebrow">INVESTIGATION LIBRARY</span><h1>Projects</h1><p>Committed source and saved context for your next task.</p></div><div className="project-actions"><Button variant="outline" onClick={onOpenSettings}>Global settings</Button><Button disabled={!model.connected} onClick={()=>{api.rescan(crypto.randomUUID()).then(model.refresh).catch(e=>setError(String(e)));}}>Rescan</Button><Button variant="ghost" onClick={()=>void model.refresh()}>Refresh</Button></div></div>
- <ProjectSubmissions api={api} onOpenSettings={onOpenSettings}/>{(model.error||error)&&<p role="alert" className="error">{model.error||error}</p>}
- {model.root?.state==='unset'?<div className="project-panel"><h2>A dedicated folder for investigation</h2><p>Set a root folder to discover its direct child repositories. You maintain these copies outside Symphony.</p><Button onClick={onOpenSettings}>Set projects root</Button></div>:<>
- {model.root?.state==='unavailable'&&<p role="alert">Projects root is unavailable. Saved task context remains available.</p>}
- <p className="project-muted">Last scanned: {model.catalog?.scannedAt?new Date(model.catalog.scannedAt).toLocaleString():'Not yet scanned'}. This records discovery time, not remote freshness.</p>
- <div className="project-layout"><div className="project-list">{model.catalog?.records.map(p=><button key={p.id} className={`project-card ${selected===p.id?'selected':''}`} onClick={()=>setSelected(p.id)}><strong>{p.displayName}</strong><span>{p.name}</span><span className="project-status">{p.readiness.replace('-',' ')}</span><small>{p.defaultRef??'Select branch'} · {p.observedCommit?.slice(0,12)??'No commit'}</small>{p.aliases.length>0&&<small>Aliases: {p.aliases.join(', ')}</small>}</button>)}{model.catalog?.records.length===0&&<p>No eligible repositories discovered.</p>}</div>
- {selected?<ProjectEditor key={selected} id={selected} api={api} connected={model.connected} operations={model.operations.filter(o=>o.projectId===selected)} onRefresh={model.refresh}/>:<div className="project-panel"><h2>Repository context</h2><p>Select a project to choose its default branch, prepare a snapshot, or edit its saved brief.</p><p>Task titles beginning with <code>[project-name]</code> identify the future implementation target. Other mentions add reference projects.</p></div>}</div>
- {model.catalog?.ineligible.length!==0&&<details><summary>Skipped folders</summary>{model.catalog?.ineligible.map(p=><p key={p.name}>{p.name}: {p.error}</p>)}</details>}</>}
- </section>;
+import BriefReport from "./BriefReport";
+import ProjectSubmissions from "./ProjectSubmissions";
+import { useEffect, useState } from "react";
+import type {
+  BriefCopy,
+  SnapshotRef,
+  SourceReport,
+} from "../../shared/projects";
+import type {
+  ProjectApi,
+  ProjectDetail,
+  ProjectOperation,
+} from "../projects/api";
+import { useProjects } from "../projects/useProjects";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
+export default function ProjectsPage({
+  api,
+  onOpenSettings,
+}: {
+  api: ProjectApi;
+  onOpenSettings(): void;
+}) {
+  const model = useProjects(api),
+    [selected, setSelected] = useState<string | null>(null),
+    [error, setError] = useState("");
+  return (
+    <section className="project-page">
+      <div className="project-heading">
+        <div>
+          <span className="eyebrow">INVESTIGATION LIBRARY</span>
+          <h1>Projects</h1>
+          <p>Committed source and saved context for your next task.</p>
+        </div>
+        <div className="project-actions">
+          <Button variant="outline" onClick={onOpenSettings}>
+            Global settings
+          </Button>
+          <Button
+            disabled={!model.connected}
+            onClick={() => {
+              api
+                .rescan(crypto.randomUUID())
+                .then(model.refresh)
+                .catch((e) => setError(String(e)));
+            }}
+          >
+            Rescan
+          </Button>
+          <Button variant="ghost" onClick={() => void model.refresh()}>
+            Refresh
+          </Button>
+        </div>
+      </div>
+      <ProjectSubmissions api={api} onOpenSettings={onOpenSettings} />
+      {(model.error || error) && (
+        <p role="alert" className="error">
+          {model.error || error}
+        </p>
+      )}
+      {model.root?.state === "unset" ? (
+        <div className="project-panel">
+          <h2>A dedicated folder for investigation</h2>
+          <p>
+            Set a root folder to discover its direct child repositories. You
+            maintain these copies outside Symphony.
+          </p>
+          <Button onClick={onOpenSettings}>Set projects root</Button>
+        </div>
+      ) : (
+        <>
+          {model.root?.state === "unavailable" && (
+            <p role="alert">
+              Projects root is unavailable. Saved task context remains
+              available.
+            </p>
+          )}
+          <p className="project-muted">
+            Last scanned:{" "}
+            {model.catalog?.scannedAt
+              ? new Date(model.catalog.scannedAt).toLocaleString()
+              : "Not yet scanned"}
+            . This records discovery time, not remote freshness.
+          </p>
+          <div className="project-layout">
+            <div className="project-list">
+              {model.catalog?.records.map((p) => (
+                <button
+                  key={p.id}
+                  className={`project-card ${selected === p.id ? "selected" : ""}`}
+                  onClick={() => setSelected(p.id)}
+                >
+                  <strong>{p.displayName}</strong>
+                  <span>{p.name}</span>
+                  <span className="project-status">
+                    {p.readiness.replace("-", " ")}
+                  </span>
+                  <small>
+                    {p.defaultRef ?? "Select branch"} ·{" "}
+                    {p.observedCommit?.slice(0, 12) ?? "No commit"}
+                  </small>
+                  {p.aliases.length > 0 && (
+                    <small>Aliases: {p.aliases.join(", ")}</small>
+                  )}
+                </button>
+              ))}
+              {model.catalog?.records.length === 0 && (
+                <p>No eligible repositories discovered.</p>
+              )}
+            </div>
+            {selected ? (
+              <ProjectEditor
+                key={selected}
+                id={selected}
+                api={api}
+                connected={model.connected}
+                operations={model.operations.filter(
+                  (o) => o.projectId === selected,
+                )}
+                onRefresh={model.refresh}
+              />
+            ) : (
+              <div className="project-panel">
+                <h2>Repository context</h2>
+                <p>
+                  Select a project to choose its default branch, prepare a
+                  snapshot, or edit its saved brief.
+                </p>
+                <p>
+                  Task titles beginning with <code>[project-name]</code>{" "}
+                  identify the future implementation target. Other mentions add
+                  reference projects.
+                </p>
+              </div>
+            )}
+          </div>
+          {model.catalog?.ineligible.length !== 0 && (
+            <details>
+              <summary>Skipped folders</summary>
+              {model.catalog?.ineligible.map((p) => (
+                <p key={p.name}>
+                  {p.name}: {p.error}
+                </p>
+              ))}
+            </details>
+          )}
+        </>
+      )}
+    </section>
+  );
 }
-function ProjectEditor({id,api,connected,operations,onRefresh}:{id:string;api:ProjectApi;connected:boolean;operations:ProjectOperation[];onRefresh():Promise<void>}){const [detail,setDetail]=useState<ProjectDetail|null>(null),[aliases,setAliases]=useState(''),[name,setName]=useState(''),[ref,setRef]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[editor,setEditor]=useState<{expectedVersion:number|null;source:SnapshotRef;report:SourceReport}|null>(null),[view,setView]=useState<BriefCopy|null>(null);
- useEffect(()=>{const c=new AbortController();api.detail(id,c.signal).then(d=>{if(c.signal.aborted)return;setDetail(d);setAliases(d.project.aliases.join(', '));setName(d.project.displayName);setRef(d.project.defaultRef??'');setView(d.briefs.at(-1)??null);}).catch(e=>{if(!c.signal.aborted)setError(String(e));});return()=>c.abort();},[api,id]);
- // Refresh generated history without replacing an active editor or its expected version.
- const completed=operations.filter(o=>o.state==='complete').map(o=>o.id).join(',');
- useEffect(()=>{if(!completed)return;const c=new AbortController();api.detail(id,c.signal).then(d=>{if(!c.signal.aborted)setDetail(d);}).catch(()=>{});return()=>c.abort();},[api,id,completed]);
- async function act(fn:()=>Promise<unknown>){setBusy(true);setError('');try{await fn();await onRefresh();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
- if(!detail)return <div className="project-panel">{error||'Loading project…'}</div>;const p=detail.project,current=detail.briefs.at(-1),snapshot=operations.findLast(o=>o.snapshot)?.snapshot??current?.source;
- return <div className="project-panel project-editor"><h2>{p.name}</h2><p className="project-muted">{p.sourcePath}</p><Label htmlFor="project-name">Display name</Label><Input id="project-name" value={name} onChange={e=>setName(e.target.value)}/><Label htmlFor="project-aliases">Aliases (comma separated)</Label><Input id="project-aliases" value={aliases} onChange={e=>setAliases(e.target.value)}/><Label htmlFor="project-branch">Default branch</Label><select id="project-branch" value={ref} onChange={e=>setRef(e.target.value)}><option value="">Select branch</option>{p.branches.map(b=><option key={b}>{b}</option>)}</select>
- <div className="project-actions"><Button variant="outline" disabled={busy||!connected} onClick={()=>void act(async()=>{const project=await api.edit({projectId:id,expectedRevision:p.revision,requestId:crypto.randomUUID(),displayName:name,aliases:aliases.split(',').map(a=>a.trim()).filter(Boolean),defaultRef:ref||null});setDetail({...detail,project});})}>Save project</Button><Button disabled={busy||!connected||!ref} onClick={()=>void act(()=>api.prepare(id,ref,crypto.randomUUID()))}>Prepare project</Button><Button variant="outline" disabled={busy||!connected||!p.defaultRef} onClick={()=>void act(()=>api.verify(id,crypto.randomUUID()))}>Verify access</Button></div>
- {operations.map(o=><div key={o.id} className="project-operation" role="status"><strong>{o.state.replace('-',' ')}</strong> · {o.message}{o.candidate&&o.source&&<><pre>{o.candidate.text}</pre><Button variant="outline" disabled={!!editor} onClick={()=>setEditor({expectedVersion:current?.version??null,source:o.source!,report:o.candidate!})}>Review candidate for saving</Button></>}</div>)}
- <h3>Saved brief</h3><p className="project-muted">Architecture, conventions, owners, and discovered validation commands. Commands are not run during investigation.</p>
- <div className="project-actions"><Button variant="outline" disabled={busy||!connected||!ref} onClick={()=>void act(()=>api.generateBrief(id,ref,crypto.randomUUID()))}>Generate brief</Button><Button variant="outline" disabled={!snapshot||!!editor} onClick={()=>setEditor({expectedVersion:current?.version??null,source:snapshot!,report:current?.report??{format:'source-report-v1',text:'',citations:[]}})}>Edit brief</Button></div>
- {editor?<><Label htmlFor="brief-editor">Brief text</Label><Textarea id="brief-editor" rows={14} value={editor.report.text} onChange={e=>setEditor({...editor,report:{...editor.report,text:e.target.value}})}/><p>Editing from version {editor.expectedVersion??'none'} · source {editor.source.commit.slice(0,12)}</p><div className="project-actions"><Button disabled={busy||!connected||!editor.report.text.trim()} onClick={()=>void act(async()=>{const saved=await api.saveBrief({projectId:id,expectedVersion:editor.expectedVersion,requestId:crypto.randomUUID(),author:editor.expectedVersion?'human-edited':'human',source:editor.source,report:editor.report});setDetail({...detail,briefs:[...detail.briefs.filter(b=>b.version!==saved.version),saved]});setView(saved);setEditor(null);})}>Save brief version</Button><Button variant="ghost" onClick={()=>setEditor(null)}>Cancel edit</Button></div></>:<><div className="project-actions">{detail.briefs.map(b=><Button size="sm" variant="ghost" key={b.version} onClick={()=>setView(b)}>Version {b.version}</Button>)}</div>{view?<><p>{view.author} · {view.source.commit.slice(0,12)}</p><BriefReport key={view.version} brief={view} api={api}/></>:<p>No saved brief yet.</p>}</>}
- {error&&<p role="alert" className="error">{error}</p>}</div>;
+function ProjectEditor({
+  id,
+  api,
+  connected,
+  operations,
+  onRefresh,
+}: {
+  id: string;
+  api: ProjectApi;
+  connected: boolean;
+  operations: ProjectOperation[];
+  onRefresh(): Promise<void>;
+}) {
+  const [detail, setDetail] = useState<ProjectDetail | null>(null),
+    [aliases, setAliases] = useState(""),
+    [name, setName] = useState(""),
+    [ref, setRef] = useState(""),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [editor, setEditor] = useState<{
+      expectedVersion: number | null;
+      source: SnapshotRef;
+      report: SourceReport;
+    } | null>(null),
+    [view, setView] = useState<BriefCopy | null>(null);
+  useEffect(() => {
+    const c = new AbortController();
+    api
+      .detail(id, c.signal)
+      .then((d) => {
+        if (c.signal.aborted) return;
+        setDetail(d);
+        setAliases(d.project.aliases.join(", "));
+        setName(d.project.displayName);
+        setRef(d.project.defaultRef ?? "");
+        setView(d.briefs.at(-1) ?? null);
+      })
+      .catch((e) => {
+        if (!c.signal.aborted) setError(String(e));
+      });
+    return () => c.abort();
+  }, [api, id]);
+  // Refresh generated history without replacing an active editor or its expected version.
+  const completed = operations
+    .filter((o) => o.state === "complete")
+    .map((o) => o.id)
+    .join(",");
+  useEffect(() => {
+    if (!completed) return;
+    const c = new AbortController();
+    api
+      .detail(id, c.signal)
+      .then((d) => {
+        if (!c.signal.aborted) setDetail(d);
+      })
+      .catch(() => {});
+    return () => c.abort();
+  }, [api, id, completed]);
+  async function act(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+      await onRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!detail)
+    return <div className="project-panel">{error || "Loading project…"}</div>;
+  const p = detail.project,
+    current = detail.briefs.at(-1),
+    snapshot =
+      operations.findLast((o) => o.snapshot)?.snapshot ?? current?.source;
+  return (
+    <div className="project-panel project-editor">
+      <h2>{p.name}</h2>
+      <p className="project-muted">{p.sourcePath}</p>
+      <Label htmlFor="project-name">Display name</Label>
+      <Input
+        id="project-name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <Label htmlFor="project-aliases">Aliases (comma separated)</Label>
+      <Input
+        id="project-aliases"
+        value={aliases}
+        onChange={(e) => setAliases(e.target.value)}
+      />
+      <Label htmlFor="project-branch">Default branch</Label>
+      <select
+        id="project-branch"
+        value={ref}
+        onChange={(e) => setRef(e.target.value)}
+      >
+        <option value="">Select branch</option>
+        {p.branches.map((b) => (
+          <option key={b}>{b}</option>
+        ))}
+      </select>
+      <div className="project-actions">
+        <Button
+          variant="outline"
+          disabled={busy || !connected}
+          onClick={() =>
+            void act(async () => {
+              const project = await api.edit({
+                projectId: id,
+                expectedRevision: p.revision,
+                requestId: crypto.randomUUID(),
+                displayName: name,
+                aliases: aliases
+                  .split(",")
+                  .map((a) => a.trim())
+                  .filter(Boolean),
+                defaultRef: ref || null,
+              });
+              setDetail({ ...detail, project });
+            })
+          }
+        >
+          Save project
+        </Button>
+        <Button
+          disabled={busy || !connected || !ref}
+          onClick={() =>
+            void act(() => api.prepare(id, ref, crypto.randomUUID()))
+          }
+        >
+          Prepare project
+        </Button>
+        <Button
+          variant="outline"
+          disabled={busy || !connected || !p.defaultRef}
+          onClick={() => void act(() => api.verify(id, crypto.randomUUID()))}
+        >
+          Verify access
+        </Button>
+      </div>
+      {operations.map((o) => (
+        <div key={o.id} className="project-operation" role="status">
+          <strong>{o.state.replace("-", " ")}</strong> · {o.message}
+          {["failed", "needs-input"].includes(o.state) && (
+            <Button
+              variant="outline"
+              disabled={busy || !connected}
+              onClick={() =>
+                void act(() => api.retryOperation(o.id, crypto.randomUUID()))
+              }
+            >
+              Retry pinned preparation
+            </Button>
+          )}
+          {o.candidate && o.source && (
+            <>
+              <pre>{o.candidate.text}</pre>
+              <Button
+                variant="outline"
+                disabled={!!editor}
+                onClick={() =>
+                  setEditor({
+                    expectedVersion: current?.version ?? null,
+                    source: o.source!,
+                    report: o.candidate!,
+                  })
+                }
+              >
+                Review candidate for saving
+              </Button>
+            </>
+          )}
+        </div>
+      ))}
+      <Button
+        variant="ghost"
+        disabled={busy || !connected}
+        onClick={() =>
+          void act(async () => {
+            setDetail(await api.detail(id));
+          })
+        }
+      >
+        Reload saved versions
+      </Button>
+      <h3>Saved brief</h3>
+      <p className="project-muted">
+        Architecture, conventions, owners, and discovered validation commands.
+        Commands are not run during investigation.
+      </p>
+      <div className="project-actions">
+        <Button
+          variant="outline"
+          disabled={busy || !connected || !ref}
+          onClick={() =>
+            void act(() => api.generateBrief(id, ref, crypto.randomUUID()))
+          }
+        >
+          Generate brief
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!snapshot || !!editor}
+          onClick={() =>
+            setEditor({
+              expectedVersion: current?.version ?? null,
+              source: snapshot!,
+              report: current?.report ?? {
+                format: "source-report-v1",
+                text: "",
+                citations: [],
+              },
+            })
+          }
+        >
+          Edit brief
+        </Button>
+      </div>
+      {editor ? (
+        <>
+          {current && current.version !== editor.expectedVersion && (
+            <div>
+              <details>
+                <summary>
+                  Compare current saved brief (version {current.version})
+                </summary>
+                <pre className="project-report">{current.report.text}</pre>
+              </details>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setEditor({ ...editor, expectedVersion: current.version })
+                }
+              >
+                Use current version as edit base
+              </Button>
+            </div>
+          )}
+          <Label htmlFor="brief-editor">Brief text</Label>
+          <Textarea
+            id="brief-editor"
+            rows={14}
+            value={editor.report.text}
+            onChange={(e) =>
+              setEditor({
+                ...editor,
+                report: { ...editor.report, text: e.target.value },
+              })
+            }
+          />
+          <p>
+            Editing from version {editor.expectedVersion ?? "none"} · source{" "}
+            {editor.source.commit.slice(0, 12)}
+          </p>
+          <div className="project-actions">
+            <Button
+              disabled={busy || !connected || !editor.report.text.trim()}
+              onClick={() =>
+                void act(async () => {
+                  const saved = await api.saveBrief({
+                    projectId: id,
+                    expectedVersion: editor.expectedVersion,
+                    requestId: crypto.randomUUID(),
+                    author: editor.expectedVersion ? "human-edited" : "human",
+                    source: editor.source,
+                    report: editor.report,
+                  });
+                  setDetail({
+                    ...detail,
+                    briefs: [
+                      ...detail.briefs.filter(
+                        (b) => b.version !== saved.version,
+                      ),
+                      saved,
+                    ],
+                  });
+                  setView(saved);
+                  setEditor(null);
+                })
+              }
+            >
+              Save brief version
+            </Button>
+            <Button variant="ghost" onClick={() => setEditor(null)}>
+              Cancel edit
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="project-actions">
+            {detail.briefs.map((b) => (
+              <Button
+                size="sm"
+                variant="ghost"
+                key={b.version}
+                onClick={() => setView(b)}
+              >
+                Version {b.version}
+              </Button>
+            ))}
+          </div>
+          {view ? (
+            <>
+              <p>
+                {view.author} · {view.source.commit.slice(0, 12)}
+              </p>
+              <BriefReport key={view.version} brief={view} api={api} />
+            </>
+          ) : (
+            <p>No saved brief yet.</p>
+          )}
+        </>
+      )}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }

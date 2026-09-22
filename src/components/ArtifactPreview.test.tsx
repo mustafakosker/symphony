@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { ArtifactPreview } from "./ArtifactPreview";
@@ -84,3 +84,4 @@ it("shows a successful preview after retrying a failed fetch", async () => {
   expect(await screen.findByText("Recovered")).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
+it('renders connected report evidence using the exact artifact version',async()=>{const api={report:vi.fn().mockResolvedValue({format:'source-report-v1',text:'Architecture [cite:entry]',citations:[{id:'entry'}]}),citation:vi.fn().mockResolvedValue({repositoryId:'repo',commit:'abc',path:'README.md',firstLine:1,startLine:1,endLine:1,lines:['Source']})} as unknown as import('../projects/api').ProjectApi;render(<ul><ArtifactPreview taskId="task" artifact={{id:'findings',version:3,digest:'digest',path:'artifacts/findings.3.bin'}} reportApi={api}/></ul>);fireEvent.click(screen.getByRole('button',{name:'View findings v3'}));fireEvent.click(await screen.findByRole('button',{name:'Source entry'}));await waitFor(()=>expect(api.citation).toHaveBeenCalledWith('task','findings',3,'entry',expect.any(AbortSignal)));expect(screen.queryByText(/source-report-v1/)).toBeNull();});
