@@ -34,6 +34,18 @@ it("approves the exact reviewed artifact digest and workflow revision", async ()
   expect(screen.getByRole("heading", { name: /Proposed workflow v1 · scope for approval/ })).toBeInTheDocument();
 });
 
+it.each(["missing", "different version"])("does not approve workflow when proposal scope is %s", async state => {
+  const task = waitingTask();
+  task.proposedWorkflow = state === "missing" ? null : { ...task.proposedWorkflow!, version: 2 };
+  const onCommand = vi.fn();
+  render(<ReviewPanel task={task} review={task.reviews[0]} disabled={false} onCommand={onCommand} />);
+  expect(screen.getByText(/Matching proposed workflow v1 scope is unavailable/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Request changes" })).toBeEnabled();
+  await userEvent.click(screen.getByRole("button", { name: "Approve" }));
+  expect(onCommand).not.toHaveBeenCalled();
+});
+
 it("requires feedback, retains it on failure, and reuses the request ID only for an unchanged retry", async () => {
   const task = waitingTask();
   const onCommand = vi.fn().mockRejectedValue(new Error("Network lost"));

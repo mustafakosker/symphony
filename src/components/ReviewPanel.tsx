@@ -44,11 +44,14 @@ export default function ReviewPanel({ task, review, disabled, onCommand }: Revie
     void submit({ kind: mode === "reject" ? "reject" : "changes", reviewId: review.id, text: text.trim() });
   }
   const proposal = review.kind === "workflow" && task.proposedWorkflow?.version === review.workflowVersion ? task.proposedWorkflow : null;
+  const scopeUnavailable = review.kind === "workflow" && !proposal;
 
   return <section className="review-panel task-review" aria-label={`${review.kind} review`}>
     <div className="section-caption"><h3>{question ? "Question for you" : reconciliation ? "Reconciliation needed" : review.kind === "pause" ? "Paused for review" : review.kind === "workflow" ? "Review proposed workflow" : "Review output"}</h3></div>
     <p className="review-prompt">{review.prompt}</p>
-    {review.kind === "workflow" && <p>Proposed workflow v{review.workflowVersion}. Approving allows the proposed steps to start.</p>}
+    {review.kind === "workflow" && (scopeUnavailable
+      ? <p role="status">Matching proposed workflow v{review.workflowVersion} scope is unavailable. Approval is disabled until it can be shown.</p>
+      : <p>Proposed workflow v{review.workflowVersion}. Approving allows the proposed steps to start.</p>)}
     {proposal && <div className="review-proposal" aria-label={`Proposed workflow v${proposal.version} scope`}>
       <h4>Proposed workflow v{proposal.version} · scope for approval</h4>
       <WorkflowScope workflow={proposal} />
@@ -67,7 +70,7 @@ export default function ReviewPanel({ task, review, disabled, onCommand }: Revie
       {reconciliation && <Button disabled={unavailable} onClick={() => { if (!text.trim()) { setError("Resolution note required"); return; } void submit({ kind: "answer", reviewId: review.id, text: text.trim() }); }}>Retry</Button>}
       {review.kind === "pause" && <Button disabled={unavailable} onClick={() => void submit({ kind: "approve", reviewId: review.id, artifactDigests: review.artifacts.map(ref => ref.digest) })}>Continue</Button>}
       {approval && <>
-        <Button disabled={unavailable} onClick={() => void submit({ kind: "approve", reviewId: review.id, artifactDigests: review.artifacts.map(ref => ref.digest) })}>Approve</Button>
+        <Button disabled={unavailable || scopeUnavailable} onClick={() => void submit({ kind: "approve", reviewId: review.id, artifactDigests: review.artifacts.map(ref => ref.digest) })}>Approve</Button>
         <Button ref={changesTrigger} variant="outline" disabled={unavailable} onClick={() => openForm("changes")}>Request changes</Button>
         <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button ref={moreTrigger} variant="ghost" size="icon" disabled={unavailable} aria-label="More review actions"><MoreHorizontal /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => openForm("reject")}>Reject task</DropdownMenuItem></DropdownMenuContent>
