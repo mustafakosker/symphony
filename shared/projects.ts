@@ -69,3 +69,7 @@ export type ProjectRecord = ProjectName & { repositoryId: string; generation: st
 export type CatalogSnapshot = CatalogView & { records: ProjectRecord[]; ineligible: DiscoveryEntry[]; scannedAt: string };
 export type ProjectEdit = { projectId: string; expectedRevision: string; requestId: string;
  aliases: string[]; displayName: string; defaultRef: string | null };
+export type SnapshotEntry = { path: string; mode: string; kind: 'file' | 'symlink' | 'submodule';
+ objectId: string; contentDigest: string | null; bytes: number; text: boolean; lfsPointer: boolean };
+export type SnapshotManifest = { version: 1; ref: Omit<SnapshotRef,'manifestDigest'>; entries: SnapshotEntry[]; totalBytes: number };
+export type SnapshotLimits = { entries: number; totalBytes: number; fileBytes: number; timeoutMs: number };
