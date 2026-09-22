@@ -38,3 +38,9 @@ export async function treeDigest(root: string): Promise<string> {
   }
   await visit(''); return hash.digest('hex');
 }
+export function projectContextFixture(): import('../../shared/projects.js').ProjectContext {
+ const snapshot: import('../../shared/projects.js').SnapshotRef={projectId:'project',repositoryId:'project',commit:'a'.repeat(40),objectFormat:'sha1',manifestDigest:'b'.repeat(64),snapshotId:'c'.repeat(64)};
+ return {version:1,generation:'g1',resolutionRevision:'d'.repeat(64),targetId:'project',referenceIds:[],projects:[{
+  projectId:'project',repositoryId:'project',name:'Project',ref:'main',snapshot,brief:{version:1,digest:'e'.repeat(64),author:'human',source:snapshot,
+   report:{format:'source-report-v1',text:'Project context',citations:[]},createdAt:'2026-09-22T10:00:00Z'}}]};
+}
