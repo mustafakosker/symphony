@@ -1,0 +1,3 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { expect,it,vi } from 'vitest';import { render,screen } from '@testing-library/react';import ProjectsPage from './ProjectsPage';import type { ProjectApi } from '../projects/api';it('directs an unset library to global settings without offering clone actions',async()=>{const api={settings:vi.fn().mockResolvedValue({state:'unset'}),catalog:vi.fn().mockResolvedValue({records:[],ineligible:[],scannedAt:''}),operations:vi.fn().mockResolvedValue([])} as unknown as ProjectApi;render(<ProjectsPage api={api} onOpenSettings={()=>{}}/>);expect(await screen.findByText('Set projects root')).toBeVisible();expect(screen.queryByText(/clone repository/i)).toBeNull();});

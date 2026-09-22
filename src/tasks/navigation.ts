@@ -3,10 +3,11 @@ import type { Filter } from "./presentation";
 export type NavigationState = {
   selectedId: string | null;
   filter: Filter;
-  screen: "list" | "detail";
+  screen: "list" | "detail" | "projects" | "settings";
 };
 
 export type NavigationEvent =
+  | { type: "screen"; screen: "projects" | "settings" }
   | { type: "select"; id: string }
   | { type: "filter"; filter: Filter }
   | { type: "back" }
@@ -26,7 +27,7 @@ export function parsePreferences(raw: string | null): NavigationState {
     const filter: Filter = preferences.filter === "review" || preferences.filter === "active" || preferences.filter === "closed"
       ? preferences.filter
       : "all";
-    const screen = selectedId === null || preferences.screen === "list" ? "list" : "detail";
+    const screen = preferences.screen === "projects" || preferences.screen === "settings" ? preferences.screen : selectedId === null || preferences.screen === "list" ? "list" : "detail";
     return { selectedId, filter, screen };
   } catch {
     return { ...defaults };
@@ -35,6 +36,7 @@ export function parsePreferences(raw: string | null): NavigationState {
 
 export function navigate(state: NavigationState, event: NavigationEvent): NavigationState {
   switch (event.type) {
+    case "screen": return {...state,screen:event.screen};
     case "select": return { ...state, selectedId: event.id, screen: "detail" };
     case "filter": return { ...state, filter: event.filter, screen: "list" };
     case "back": return { ...state, screen: "list" };

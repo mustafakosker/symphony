@@ -44,6 +44,7 @@ export async function openProjectServices(configPath:string,host:Settings,primar
  const api={setRuntimeVersion:(version:string)=>{runtimeVersion=version;},settings,catalog,snapshots,briefs,briefJobs,binding,draftGate,schedulerStore,primary,resolve,
   rescan:(requestId:string)=>enqueue('scan',null,undefined,requestId),prepare:(id:string,ref:string,requestId:string)=>enqueue('prepare',id,ref,requestId),
   generate:(id:string,ref:string,requestId:string)=>enqueue('brief',id,ref,requestId,true),verify:async(id:string,requestId:string)=>enqueue('verify',id,(await catalog.get(id)).defaultRef??undefined,requestId),
+  operations:()=>serial(async()=>Promise.all(Object.values((await load()).operations).map(async o=>({...o.status,projectId:o.project?.id,snapshot:o.snapshot,...(o.jobId?{candidate:await briefJobs.candidate(o.jobId),source:await briefJobs.source(o.jobId)}:{})})))),
   operation:(id:string)=>serial(async()=>{const op=(await load()).operations[id];if(!op)return binding.status(id);return {...op.status,...(op.jobId?{candidate:await briefJobs.candidate(op.jobId),source:await briefJobs.source(op.jobId)}:{}),...(op.snapshot?{snapshot:op.snapshot}:{})};}),
   async tick(){if(!background)background=work().catch(e=>{lastError=e instanceof Error?e.message:String(e);}).finally(()=>{background=null;});},
   async close(){await background;await queue;},issues:()=>lastError?[{id:'project-services',taskId:null,message:lastError}]:[],

@@ -1,3 +1,6 @@
+import ProjectSettings from "./components/ProjectSettings";
+import ProjectsPage from "./components/ProjectsPage";
+import {projectApi,type ProjectApi} from "./projects/api";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { Command } from "lucide-react";
 import NewTaskDialog from "./components/NewTaskDialog";
@@ -10,7 +13,7 @@ import { useWorkspace } from "./tasks/useWorkspace";
 
 const PREF_KEY = "symphony-workspace-preferences-v1";
 
-export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
+export default function App({ api = workspaceApi, projects = projectApi }: { api?: WorkspaceApi; projects?:ProjectApi }) {
   const workspace = useWorkspace(api);
   const [navigation, dispatch] = useReducer(navigate, undefined, () => {
     try { return parsePreferences(localStorage.getItem(PREF_KEY)); }
@@ -45,7 +48,7 @@ export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
     setSearchPending(true);
   };
   return <>
-    <WorkspaceShell tasks={tasks} filter={navigation.filter} task={selectedTask}
+    <WorkspaceShell screen={navigation.screen} onScreen={screen=>dispatch({type:"screen",screen})} tasks={tasks} filter={navigation.filter} task={selectedTask}
       connected={workspace.connected} coordinator={workspace.view?.coordinator ?? null}
       detail={detail} onFilter={filter => { dispatch({ type: "filter", filter }); setReturnFocusId(null); }}
       onSearch={onSearch} onBack={() => { dispatch({ type: "back" }); setReturnFocusId(navigation.selectedId); }}>
@@ -58,7 +61,7 @@ export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
         {workspace.submissionId && <div className="notice-banner" role="status">Submitted; waiting for pickup</div>}
         {workspace.view?.issues.map(issue => <div key={issue.id} className="notice-banner" role="status">{issue.message}</div>)}
       </div>
-      {detail ? selectedTask ? <TaskDetail key={selectedTask.id} task={selectedTask} stale={!workspace.connected} onCommand={workspace.act} />
+      {navigation.screen === "settings" ? <ProjectSettings api={projects}/> : navigation.screen === "projects" ? <ProjectsPage api={projects} onOpenSettings={()=>dispatch({type:"screen",screen:"settings"})}/> : detail ? selectedTask ? <TaskDetail key={selectedTask.id} task={selectedTask} stale={!workspace.connected} onCommand={workspace.act} />
         : missing ? <section className="workspace-state"><Command size={28} /><h1>Task unavailable</h1><p>The selected task is no longer in the coordinator view. Return to the list to choose another task.</p></section>
         : loading ? <section className="workspace-state"><h1>Loading task…</h1></section>
         : <section className="workspace-state"><h1>Unable to load task</h1><p>Try again when the coordinator is available.</p></section>

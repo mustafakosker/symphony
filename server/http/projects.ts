@@ -13,6 +13,7 @@ export async function handleProjectRequest(req:IncomingMessage,res:ServerRespons
  if(path==='/api/projects'&&get)return respond(await s.catalog.read());
  if(path==='/api/projects/rescan'&&post){const v=body(await readJson(req),['requestId']);return respond(await s.rescan(text(v.requestId)),202);}
  if(path==='/api/projects/resolve'&&post){const v=parseResolution(await readJson(req));return respond(await s.resolve(v.text,v.choices));}
+ if(path==='/api/project-operations'&&get)return respond(await s.operations());
  if(path==='/api/project-submissions'&&get)return respond(await s.draftGate.list());
  let m=path.match(/^\/api\/project-submissions\/([A-Za-z0-9_-]+)(\/resolve)?$/);
  if(m){if(get&&!m[2]){const item=(await s.draftGate.list()).find(i=>i.submissionId===m![1]);if(!item)throw new BoundaryError('missing','Pending submission unavailable');return respond(item);}if(post&&m[2]){const v=body(await readJson(req),['expectedRevision','requestId','projectDraft']);return respond(await s.draftGate.resolveIssue(m[1],integer(v.expectedRevision),parseProjectDraft(v.projectDraft),text(v.requestId)),202);}}
