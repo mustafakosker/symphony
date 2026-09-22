@@ -53,8 +53,7 @@ it('creates one durable correction and accepts only the new token', async () => 
     expect(correction).not.toBe(ready.replace('.ready.md', '.md'));
     await submitFile(correction, 'action: reject\n\nCorrected reason');
     await restarted.scan(5); await restarted.scan(6);
-    const reopened = await (await import('../store/task-store.js')).openStore(f.localRoot);
-    expect((await reopened.get(waitingTask().id)).reviews[0].answer).toBe('Corrected reason');
+    expect((await restarted.store.get(waitingTask().id)).reviews[0].answer).toBe('Corrected reason');
   } finally { await f.dispose(); }
 });
 
@@ -75,7 +74,8 @@ it('recovers a command committed before the apply callback loses its result', as
     await adapter.scan(1); await adapter.scan(2);
     expect((await f.store.get(waitingTask().id)).revision).toBe(2);
     const restarted = await f.restart(); await restarted.scan(3);
-    expect((await f.store.get(waitingTask().id)).revision).toBe(2);
+    expect((await restarted.store.get(waitingTask().id)).revision).toBe(2);
+    expect((await restarted.store.get(waitingTask().id)).reviews[0].answer).toBe('Persisted');
     expect(await readFile(ready.replace('.ready.md', '.receipt.md'), 'utf8')).toContain('Accepted');
   } finally { await f.dispose(); }
 });
@@ -112,8 +112,7 @@ it('recovers a captured snapshot even when the ready file changes before restart
     expect((await loadRecords(f.localRoot)).records[0].phase).toBe('captured');
     await writeFile(ready, (await readFile(ready, 'utf8')).replace('Captured', 'Later'));
     const restarted = await f.restart(); await restarted.scan(3);
-    const reopened = await (await import('../store/task-store.js')).openStore(f.localRoot);
-    expect((await reopened.get(waitingTask().id)).reviews[0].answer).toBe('Captured');
+    expect((await restarted.store.get(waitingTask().id)).reviews[0].answer).toBe('Captured');
   } finally { await f.dispose(); }
 });
 
@@ -137,7 +136,8 @@ it('retries receipt publication without applying the settled command again', asy
     expect((await f.store.get(waitingTask().id)).revision).toBe(2);
     expect((await loadRecords(f.localRoot)).records[0].receiptPublished).toBe(false);
     const restarted = await f.restart(); await restarted.scan(3);
-    expect((await f.store.get(waitingTask().id)).revision).toBe(2);
+    expect((await restarted.store.get(waitingTask().id)).revision).toBe(2);
+    expect((await restarted.store.get(waitingTask().id)).reviews[0].answer).toBe('Accepted once');
     expect(await readFile(ready.replace('.ready.md', '.receipt.md'), 'utf8')).toContain('Accepted');
   } finally { await f.dispose(); }
 });
@@ -183,12 +183,13 @@ for (const phase of ['captured', 'applying', 'settled'] as const) {
       try {
         await f.adapter.scan(0);
         const ready = await submitFile(await draftFile(f.workspaceRoot), 'action: reject\n\nStable snapshot');
+        const original = await readFile(ready);
         const { saveRecord } = await import('./io.js');
         const { applyHumanCommand } = await import('../coordinator/reviews.js');
-        let injected = false;
+        let injected = false; let applyCalls = 0;
+        const coordinator = { tick: async () => {}, shutdown: async () => {}, stopTask: async () => {} } as never;
         const adapter = createFileReviews({ workspaceRoot: f.workspaceRoot, localRoot: f.localRoot, stableMs: 0, store: f.store,
-          apply: command => applyHumanCommand(f.store,
-            { tick: async () => {}, shutdown: async () => {}, stopTask: async () => {} } as never, command),
+          apply: command => { applyCalls++; return applyHumanCommand(f.store, coordinator, command); },
           io: { saveRecord: async (root, record) => {
             if (record.phase === phase && !injected) {
               injected = true;
@@ -199,11 +200,33 @@ for (const phase of ['captured', 'applying', 'settled'] as const) {
           } } });
         await adapter.scan(1); await adapter.scan(2);
         expect(injected).toBe(true);
-        if (phase === 'captured' && timing === 'before') expect((await f.store.get(waitingTask().id)).revision).toBe(1);
-        const restarted = await f.restart(); await restarted.scan(3); await restarted.scan(4);
-        const reopened = await (await import('../store/task-store.js')).openStore(f.localRoot);
-        expect((await reopened.get(waitingTask().id)).revision).toBe(2);
-        expect((await reopened.get(waitingTask().id)).reviews[0].answer).toBe('Stable snapshot');
+        const durable = (await loadRecords(f.localRoot)).records[0];
+        const expectedPhase = timing === 'after' ? phase : phase === 'captured' ? 'issued' : phase === 'applying' ? 'captured' : 'applying';
+        expect(durable.phase).toBe(expectedPhase);
+        expect((await f.store.get(waitingTask().id)).revision).toBe(phase === 'settled' ? 2 : 1);
+        expect(applyCalls).toBe(phase === 'settled' ? 1 : 0);
+        if (durable.snapshot) expect(Buffer.from(durable.snapshot.base64, 'base64')).toEqual(original);
+        if (durable.command) {
+          expect(durable.command.requestId).toBe(durable.token);
+          expect(durable.command.expectedRevision).toBe(1);
+        }
+        await writeFile(ready, (await readFile(ready, 'utf8')).replace('Stable snapshot', 'Later bytes'));
+        const restarted = await f.restart();
+        let replayCalls = 0;
+        const recovering = createFileReviews({ workspaceRoot: f.workspaceRoot, localRoot: f.localRoot, stableMs: 0,
+          store: restarted.store, apply: command => {
+            replayCalls++; return applyHumanCommand(restarted.store, coordinator, command);
+          } });
+        await recovering.scan(3); await recovering.scan(4);
+        const finalRecord = (await loadRecords(f.localRoot)).records[0];
+        expect(finalRecord.phase).toBe('settled');
+        expect(finalRecord.command?.requestId).toBe(durable.token);
+        if (durable.snapshot) expect(finalRecord.snapshot).toEqual(durable.snapshot);
+        if (durable.command) expect(finalRecord.command).toEqual(durable.command);
+        expect(replayCalls).toBe(phase === 'settled' && timing === 'after' ? 0 : 1);
+        expect((await restarted.store.get(waitingTask().id)).revision).toBe(2);
+        expect((await restarted.store.get(waitingTask().id)).reviews[0].answer)
+          .toBe(durable.snapshot ? 'Stable snapshot' : 'Later bytes');
         expect(await readFile(ready.replace('.ready.md', '.receipt.md'), 'utf8')).toContain('Accepted');
       } finally { await f.dispose(); }
     });
@@ -232,7 +255,8 @@ it('recovers a receipt created before its publication flag was persisted', async
     const restarted = await f.restart(); await restarted.scan(3);
     expect(await readFile(ready.replace('.ready.md', '.receipt.md'))).toEqual(original);
     expect((await loadRecords(f.localRoot)).records[0].receiptPublished).toBe(true);
-    expect((await f.store.get(waitingTask().id)).revision).toBe(2);
+    expect((await restarted.store.get(waitingTask().id)).revision).toBe(2);
+    expect((await restarted.store.get(waitingTask().id)).reviews[0].answer).toBe('Once');
   } finally { await f.dispose(); }
 });
 
@@ -263,5 +287,36 @@ it('reports duplicate ready copies without applying them', async () => {
     await f.adapter.scan(1); await f.adapter.scan(2);
     expect((await f.store.get(waitingTask().id)).revision).toBe(1);
     expect((await f.adapter.issues()).some(i => i.message.includes('Unknown synced review file'))).toBe(true);
+  } finally { await f.dispose(); }
+});
+
+it('recovers an applying request before exporting a later actionable review', async () => {
+  const task = waitingTask(); task.proposedWorkflow = null;
+  task.reviews = [
+    { id: 'first-question', kind: 'question', workflowVersion: null, stepId: '$triage', artifacts: [], prompt: 'First?', answer: null, decision: null },
+    { id: 'second-question', kind: 'question', workflowVersion: null, stepId: '$triage', artifacts: [], prompt: 'Second?', answer: null, decision: null },
+  ];
+  const f = await fileReviewFixture(task);
+  try {
+    await f.adapter.scan(0);
+    await submitFile(await draftFile(f.workspaceRoot), 'action: answer\n\nFirst answer');
+    const { applyHumanCommand } = await import('../coordinator/reviews.js');
+    let loseResult = true;
+    const adapter = createFileReviews({ workspaceRoot: f.workspaceRoot, localRoot: f.localRoot, stableMs: 0, store: f.store,
+      apply: async command => {
+        const result = await applyHumanCommand(f.store,
+          { tick: async () => {}, shutdown: async () => {}, stopTask: async () => {} } as never, command);
+        if (loseResult) { loseResult = false; throw new Error('lost after commit'); }
+        return result;
+      } });
+    await adapter.scan(1); await adapter.scan(2);
+    expect((await loadRecords(f.localRoot)).records).toHaveLength(1);
+    expect((await loadRecords(f.localRoot)).records[0].phase).toBe('applying');
+    await expect(draftFile(f.workspaceRoot)).rejects.toThrow('Expected one draft, got 0');
+    const restarted = await f.restart(); await restarted.scan(3);
+    expect((await restarted.store.get(task.id)).revision).toBe(2);
+    expect((await restarted.store.get(task.id)).reviews[0].answer).toBe('First answer');
+    expect((await loadRecords(f.localRoot)).records).toHaveLength(2);
+    expect(await readFile(await draftFile(f.workspaceRoot), 'utf8')).toContain('Second?');
   } finally { await f.dispose(); }
 });

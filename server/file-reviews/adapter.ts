@@ -186,8 +186,12 @@ export function createFileReviews(options: FileReviewOptions): FileReviewAdapter
       if (name.endsWith('.md') && !known.has(name)) issues.push(issue(name, 'unknown', `Unknown synced review file ${name}`));
     }
     if (!loaded.issues.length) {
+      const latestRecords = (await loadRecords(options.localRoot)).records;
+      const unresolvedTasks = new Set(latestRecords.filter(record => record.phase === 'captured' || record.phase === 'applying')
+        .map(record => record.binding.taskId));
       const view = await options.store.list();
       for (const task of view.tasks) {
+        if (unresolvedTasks.has(task.id)) continue;
         const review = selectReview(task);
         if (!review) continue;
         if (records.some(record => record.binding.taskId === task.id && record.binding.review.id === review.id &&

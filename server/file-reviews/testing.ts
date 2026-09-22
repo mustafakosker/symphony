@@ -20,7 +20,7 @@ export async function fileReviewFixture(task: Task = waitingTask(), overrides: P
   const make = (current: Store) => createFileReviews({ workspaceRoot, localRoot, stableMs: 0, store: current,
     apply: command => applyHumanCommand(current, coordinator as never, command) });
   return { root, workspaceRoot, localRoot, store, adapter: make(store),
-    async restart() { return make(await openStore(localRoot)); },
+    async restart() { const reopenedStore = await openStore(localRoot); return Object.assign(make(reopenedStore), { store: reopenedStore }); },
     async dispose() { await rm(root, { recursive: true, force: true }); } };
 }
 export async function draftFile(workspaceRoot: string): Promise<string> {
