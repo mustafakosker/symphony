@@ -29,3 +29,19 @@ export async function readJson(request: IncomingMessage): Promise<unknown> {
     throw new BoundaryError('invalid', 'Malformed JSON request');
   }
 }
+
+export async function readBytes(request: IncomingMessage, maxBytes: number): Promise<Uint8Array> {
+  const chunks: Buffer[] = []; let size = 0;
+  try {
+    for await (const chunk of request) {
+      const bytes = Buffer.from(chunk); size += bytes.length;
+      if (size > maxBytes) throw new HttpError(413, 'Document is too large');
+      chunks.push(bytes);
+    }
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new BoundaryError('invalid', 'Document upload was interrupted');
+  }
+  if (!request.complete) throw new BoundaryError('invalid', 'Document upload was interrupted');
+  return Buffer.concat(chunks, size);
+}

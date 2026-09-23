@@ -1,3 +1,7 @@
+import type { PreparationService } from '../preparation/service.js';
+import type { JiraIntake } from '../jira/intake.js';
+import type { TargetOption } from '../../shared/jira-preparation.js';
+import { handlePreparationRoute } from './jira-preparation.js';
 import { randomUUID } from 'node:crypto';
 import type { RequestListener, ServerResponse } from 'node:http';
 import { BoundaryError, parseCommand } from '../../shared/validate.js';
@@ -7,7 +11,7 @@ import type { Intake } from '../intake/intake.js';
 import type { Coordinator } from '../coordinator/coordinator.js';
 import { checkAccess, HttpError, readJson } from './access.js';
 
-type Deps = { store: Store; intake: Intake; coordinator: Coordinator; allowedOrigin: string;
+type Deps = { preparation?: PreparationService; jira?: JiraIntake; targets?: TargetOption[]; store: Store; intake: Intake; coordinator: Coordinator; allowedOrigin: string;
   runtimeVersion?: () => string; health?: () => 'ready' | 'degraded';
   issues?: () => Promise<import('../../shared/contracts.js').Issue[]> };
 const token = '[A-Za-z0-9][A-Za-z0-9._-]*';
@@ -45,7 +49,7 @@ export function createApi(deps: Deps): RequestListener {
       if (method === 'GET' && path === '/api/workspace') {
         const view = await deps.store.list();
         const [intakeIssues, startupIssues] = await Promise.all([deps.intake.issues(), deps.issues?.() ?? []]);
-        send(response, 200, { ...view, issues: [...view.issues, ...intakeIssues, ...startupIssues],
+        send(response, 200, { ...view, ...(deps.jira ? { jira: { ...deps.jira.view(), targets: deps.targets ?? [] } } : {}), issues: [...view.issues, ...intakeIssues, ...startupIssues],
           coordinator: view.coordinator === 'degraded' || deps.health?.() === 'degraded' ? 'degraded' : 'ready' });
         return;
       }
@@ -98,6 +102,7 @@ export function createApi(deps: Deps): RequestListener {
           'Content-Security-Policy': "default-src 'none'; sandbox" });
         response.end(bytes); return;
       }
+      if (deps.preparation && deps.jira && await handlePreparationRoute(request, response, url, { preparation: deps.preparation, jira: deps.jira })) return;
       send(response, 404, { error: 'Route not found' });
     })().catch(error => {
       const operationId = randomUUID();

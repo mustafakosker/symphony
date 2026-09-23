@@ -1,3 +1,9 @@
+import { loadJiraHandoffConfig, targetOptions } from './config/jira-handoff.js';
+import { createJiraIntake } from './jira/intake.js';
+import { createMockJiraAdapter } from './jira/mock.js';
+import { createMockOnaAdapter } from './ona/mock.js';
+import type { OnaAdapter } from './ona/adapter.js';
+import { createPreparationService, type PreparationService } from './preparation/service.js';
 import { createServer, type Server } from 'node:http';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +22,7 @@ import { createIntake } from './intake/intake.js';
 import { acquireHostLock } from './store/lock.js';
 import { openStore } from './store/task-store.js';
 
-type TestOnlyInjection = { runner?: Runner;
+type TestOnlyInjection = { runner?: Runner; onaAdapter?: OnaAdapter;
   verifyCapabilities?: (settings: Settings, roles: RoleConfig[], version: string) => Promise<void> };
 type Options = { configPath?: string; buildDir?: string } & TestOnlyInjection;
 export type Application = { address: string; close(): Promise<void> };
@@ -29,6 +35,7 @@ export async function startApplication(options: Options = {}): Promise<Applicati
   let releaseLock: (() => Promise<void>) | null = null;
   let server: Server | null = null;
   let coordinator: ReturnType<typeof createCoordinator> | null = null;
+  let preparation: PreparationService | undefined;
   let timer: NodeJS.Timeout | null = null;
   let ticking: Promise<void> | null = null;
   let stopping = false;
@@ -44,9 +51,17 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     const { version } = await runner.probe();
     await (options.verifyCapabilities ?? verifyConfiguredProfiles)(settings, registry.roles, version);
     const intake = createIntake(settings.workspaceRoot, store, settings.stableMs);
+    const jiraConfig = settings.jiraHandoffConfigPath ? await loadJiraHandoffConfig(settings.jiraHandoffConfigPath, registry) : null;
+    const jira = jiraConfig ? createJiraIntake({ store, registry, config: jiraConfig, localRoot: settings.localRoot,
+      adapter: createMockJiraAdapter(jiraConfig) }) : undefined;
+    if (jira) {
+      preparation = createPreparationService({ store, registry, localRoot: settings.localRoot,
+        adapter: options.onaAdapter ?? createMockOnaAdapter({ localRoot: settings.localRoot }) });
+      await preparation.recover();
+    }
     let fileReviews: FileReviewAdapter | undefined;
     coordinator = createCoordinator({ store, intake, registry, runner, settings, recovered: true,
-      beforeDispatch: async now => { await fileReviews?.scan(now.getTime()); } });
+      beforeDispatch: async now => { await fileReviews?.scan(now.getTime()); await jira?.tick(now); } });
     const activeCoordinator = coordinator;
     if (settings.fileReviewsEnabled) {
       fileReviews = createFileReviews({ store, workspaceRoot: settings.workspaceRoot,
@@ -54,9 +69,9 @@ export async function startApplication(options: Options = {}): Promise<Applicati
         apply: command => applyHumanCommand(store, activeCoordinator, command) });
     }
     const ui = createStaticHandler(options.buildDir ?? defaultBuildDir);
-    const api = createApi({ store, intake, coordinator, allowedOrigin: settings.allowedOrigin,
+    const api = createApi({ store, intake, coordinator, preparation, jira, targets: targetOptions(registry), allowedOrigin: settings.allowedOrigin,
       runtimeVersion: () => version, health: () => degraded ? 'degraded' : 'ready',
-      issues: async () => [...startupIssues, ...(await fileReviews?.issues() ?? [])] });
+      issues: async () => [...startupIssues, ...(await fileReviews?.issues() ?? []), ...(jira?.view().error ? [{ id: 'jira-sync', taskId: null, message: jira.view().error! }] : [])] });
     server = createServer((request, response) => {
       if ((request.url ?? '').startsWith('/api/')) api(request, response);
       else ui(request, response);
@@ -91,7 +106,9 @@ export async function startApplication(options: Options = {}): Promise<Applicati
         if (timer) clearTimeout(timer);
         let clean = false;
         try {
-          await ownedCoordinator.shutdown();
+          const shutdowns = await Promise.allSettled([preparation?.close(), ownedCoordinator.shutdown()]);
+          const failedShutdown = shutdowns.find(result => result.status === 'rejected');
+          if (failedShutdown?.status === 'rejected') throw failedShutdown.reason;
           if (ticking) {
             let deadline: NodeJS.Timeout | undefined;
             try {
@@ -112,6 +129,7 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     stopping = true;
     if (timer) clearTimeout(timer);
     let clean = true;
+    await preparation?.close().catch(cause => { clean = false; console.error('[startup] Handoff shutdown failed:', cause); });
     await coordinator?.shutdown().catch(cause => { clean = false; console.error('[startup] Coordinator shutdown failed:', cause); });
     if (server?.listening) await new Promise<void>(resolveClose => server!.close(() => resolveClose()));
     if (clean) await releaseLock?.();

@@ -123,3 +123,24 @@ it('bounds app close while process start is pending and fences a late handle', a
   expect(abandoned).toBe(1);
   expect((await (await openStore(settings.workspaceRoot)).get(task.id)).runs[0].result).toBeNull();
 });
+
+it('runs the Jira upload-to-ONA path without starting Codex and retains receipt after restart', async () => {
+ const fixture=await setup(), settings=await loadSettings(fixture.configPath);
+ const {jiraIssue}=await import('./preparation/testing'); const {controlledRunner}=await import('./testing/fixtures'); const control=controlledRunner();
+ await writeFile(join(settings.workspaceRoot,'projects/projects.json'),JSON.stringify({projects:[{id:'app',names:['App'],repositories:[{id:'web',localPath:null,mcpProfile:'mock',baseRef:'main',defaultRef:'main'}]}]}));
+ const fixturesPath=join(fixture.root,'jira.json'),jiraHandoffConfigPath=join(fixture.root,'handoff.json');
+ await writeFile(fixturesPath,JSON.stringify([jiraIssue()])); await writeFile(jiraHandoffConfigPath,JSON.stringify({mode:'mock',connectionId:'demo',fixturesPath,projectMappings:{APP:'app'}}));
+ await writeFile(fixture.configPath,JSON.stringify({...JSON.parse(await readFile(fixture.configPath,'utf8')),jiraHandoffConfigPath}));
+ const options={configPath:fixture.configPath,buildDir:fixture.buildDir,runner:control.runner,verifyCapabilities:async()=>{}};
+ let app=await startApplication(options); let id:string;
+ try {
+ const post=(path:string,value:unknown)=>fetch(app.address+path,{method:'POST',headers:{Origin:app.address,'Content-Type':'application/json'},body:JSON.stringify(value)});
+ expect((await post('/api/jira/sync',{requestId:'sync'})).status).toBe(200);
+ let task=(await (await fetch(app.address+'/api/workspace')).json()).tasks[0];id=task.id;
+ for(const role of ['design','implementation']) {const res=await fetch(`${app.address}/api/tasks/${task.id}/documents/${role}`,{method:'POST',headers:{Origin:app.address,'Content-Type':'application/octet-stream','X-Symphony-Request-Id':role,'X-Symphony-Expected-Revision':String(task.revision),'X-Symphony-Filename':role+'.md'},body:'# '+role});expect(res.status).toBe(200);task=await res.json();}
+ for(const kind of ['prepare','send']) {const res=await post(`/api/tasks/${id}/preparation/commands`,{taskId:id,requestId:kind,expectedRevision:task.revision,action:{kind}});expect(res.status).toBe(200);task=await res.json();}
+ expect(task.status).toBe('done'); expect(control.starts).toHaveLength(0);
+ } finally {await app.close();}
+ app=await startApplication(options);
+ try {const task=await(await fetch(`${app.address}/api/tasks/${id!}`)).json();expect(task.preparation.attempts[0].receipt.simulated).toBe(true);expect(control.starts).toHaveLength(0);}finally{await app.close();}
+});
