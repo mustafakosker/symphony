@@ -2203,3 +2203,44 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* Jira preparation stays scoped to the existing split-pane workspace. */
+.jira-preparation .jira-eyebrow { display:flex; gap:12px; align-items:center; font-size:11px; font-weight:650; letter-spacing:.09em; color:#617268; margin:12px 0; }
+.jira-preparation .jira-eyebrow span { background:#f0f3ef; border:1px solid #dfe6db; padding:3px 7px; border-radius:4px; font-size:9px; }
+.jira-preparation .jira-source-meta { display:flex; align-items:center; flex-wrap:wrap; gap:14px; color:#7b827c; font-size:12px; margin:15px 0 24px; }
+.jira-preparation a { color:#3e6d55; text-decoration:underline; text-underline-offset:3px; }
+.jira-preparation .jira-source-meta a { display:inline-flex; align-items:center; gap:4px; }
+.jira-preparation .jira-source { border-bottom:1px solid #e6e8e1; padding-bottom:22px; margin-bottom:24px; }
+.jira-preparation h3 { font-size:16px; margin:0 0 12px; } .jira-preparation h4 { font-size:13px; margin:14px 0 8px; }
+.jira-preparation pre { white-space:pre-wrap; overflow-wrap:anywhere; font:13px/1.65 inherit; margin:10px 0; }
+.jira-preparation p { font-size:13px; line-height:1.65; color:#757d74; }
+.jira-preparation .jira-section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.jira-preparation .jira-section-heading h3,.jira-preparation .jira-section-heading h4 { margin:0; }
+.jira-preparation .jira-section-heading span { color:#788272; font-size:11px; }
+.jira-preparation .jira-document-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:14px 0 26px; }
+.jira-preparation .jira-document { border:1px solid #e0e5dc; border-radius:9px; padding:16px; min-width:0; background:#fcfdfb; }
+.jira-preparation .jira-file-name { overflow-wrap:anywhere; color:#343e35; } .jira-preparation .jira-file-name span { display:block; font-size:11px; color:#81897b; }
+.jira-preparation .jira-upload-label { font-size:12px; display:block; color:#687663; }
+.jira-preparation input[type=file] { display:block; width:100%; font-size:11px; padding-top:7px; }
+.jira-preparation input::file-selector-button { padding:6px 10px; border:1px solid #d8dfd2; border-radius:5px; background:#f1f5ed; color:#475442; cursor:pointer; }
+.jira-preparation .jira-inline-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:12px; font-size:12px; }
+.jira-preparation .jira-inline-actions .text-button { font-size:12px; }
+.jira-preparation .jira-preview { max-height:260px; overflow:auto; margin-top:14px; border-top:1px solid #e0e5dc; }
+.jira-preparation .jira-editor { border-top:1px solid #e6e8e1; padding:24px 0; }
+.jira-preparation .jira-editor label { display:flex; flex-direction:column; gap:8px; font-size:12px; color:#515c4d; }
+.jira-preparation .jira-target-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:20px 0; }
+.jira-preparation .jira-editor textarea,.jira-preparation .jira-editor input,.jira-preparation .jira-editor select { width:100%; border:1px solid #dce2d5; border-radius:7px; padding:10px 12px; background:#fff; color:#35402f; font:13px/1.6 inherit; min-width:0; }
+.jira-preparation .jira-editor textarea { resize:vertical; min-height:230px; margin-bottom:12px; line-height:1.7; }
+.jira-preparation .jira-error { background:#fff0e8; border:1px solid #efd4c5; padding:12px; margin:14px 0; border-radius:6px; color:#964b29; font-size:13px; }
+.jira-preparation .jira-receipt { background:#f0f6eb; border:1px solid #d8e6cd; padding:22px; border-radius:9px; margin-bottom:24px; }
+.jira-preparation .jira-receipt dl { display:grid; grid-template-columns:80px minmax(0,1fr); gap:10px; font-size:12px; }
+.jira-preparation .jira-receipt dd { margin:0; overflow-wrap:anywhere; }.jira-preparation .jira-receipt dt { color:#708165; }
+.jira-preparation .jira-handoff-status { border:1px solid #e8d9b6; background:#fffaed; padding:18px; border-radius:8px; margin-bottom:24px; }
+.jira-preparation .jira-request-id { overflow-wrap:anywhere; font-size:11px; }
+.jira-preparation .jira-launch-actions { border-top:1px solid #e6e8e1; padding:20px 0 36px; }
+.jira-preparation .jira-prepare { margin:18px 0 24px; }.jira-preparation button:disabled { cursor:not-allowed; opacity:.45; }
+.jira-preparation :focus-visible { outline:2px solid #6b8451; outline-offset:3px; }
+.jira-sync-bar { display:flex; align-items:center; gap:18px; flex-wrap:wrap; padding:10px 28px; border-bottom:1px solid #e4e7df; color:#748069; background:#fafbf7; font-size:12px; }
+.jira-sync-bar [role=alert] { color:#965b33; }
+@media(max-width:1100px) { .jira-preparation .jira-document-grid { grid-template-columns:1fr; } }
+@media(max-width:600px) { .jira-preparation .jira-target-fields { grid-template-columns:1fr; }.jira-sync-bar { padding:10px 16px; gap:10px; }.jira-preparation .detail-title-row { align-items:flex-start; flex-direction:column; gap:12px; }.jira-preparation .jira-receipt { padding:16px; } }

@@ -61,7 +61,13 @@ export function usePreparation({task,connected,api,mutateTask}:{task:Task;connec
   if(!state.current.dirty&&!p)return Promise.resolve(true);
   return execute(()=>command({kind:'save',promptText:state.current.text,target:state.current.target}));
  }
- async function flush(){if(running.current&&!await running.current)return false;while(state.current.dirty){if(!await save())return false;}return !pending.current;}
+ async function flush(){
+  const p=pending.current;
+  if(p?.kind==='command'&&['send','retry','reconcile'].includes(p.command.action.kind))return true;
+  if(running.current&&!await running.current)return false;
+  if(Object.values(errors.current).some(Boolean)){setError('Resolve or discard the failed upload before leaving.');return false;}
+  while(state.current.dirty){if(!await save())return false;}return !pending.current;
+ }
  function action(kind:'prepare'|'send'|'retry'|'reconcile'|'cancel') {
   if((kind==='send'||kind==='retry')&&(state.current.dirty||Object.values(errors.current).some(Boolean)))return Promise.resolve(false);
   if(pending.current&&(pending.current.kind!=='command'||pending.current.command.action.kind!==kind)){setError('Retry the pending action first.');return Promise.resolve(false);}
@@ -85,5 +91,6 @@ export function usePreparation({task,connected,api,mutateTask}:{task:Task;connec
   if(!dirty||busy||!connected||error||state.current.autoBlocked)return;
   const timer=window.setTimeout(()=>void save(),500);return()=>window.clearTimeout(timer);
  });
- return{promptText,target,dirty,busy,error,uploadError,setPromptText,setTarget,prepare:()=>action('prepare'),save,upload,discardUploadError,remove,send:()=>action('send'),retry:()=>action('retry'),reconcile:()=>action('reconcile'),cancel:()=>action('cancel'),flush};
+ const unsaved=dirty||Object.values(uploadError).some(Boolean)||pending.current?.kind==='upload';
+ return{promptText,target,dirty,busy,error,uploadError,unsaved,setPromptText,setTarget,prepare:()=>action('prepare'),save,upload,discardUploadError,remove,send:()=>action('send'),retry:()=>action('retry'),reconcile:()=>action('reconcile'),cancel:()=>action('cancel'),flush};
 }

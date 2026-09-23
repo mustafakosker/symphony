@@ -1,6 +1,7 @@
 import type { Task } from "../../shared/contracts";
 
 export function needsReview(task: Task): boolean {
+  if (task.preparation) return !isClosed(task) && !['sending','unconfirmed'].includes(task.preparation.attempts.at(-1)?.status ?? '');
   return task.status === "waiting-for-human" && task.reviews.some((review) => review.decision === null);
 }
 export function isClosed(task: Task): boolean {
@@ -11,6 +12,13 @@ export function isClosed(task: Task): boolean {
   );
 }
 export function statusLabel(task: Task): string {
+  if (task.preparation) {
+    if (task.status === 'done') return 'Sent to ONA';
+    if (task.status === 'cancelled') return 'Cancelled';
+    const status = task.preparation.attempts.at(-1)?.status;
+    if (status) return { sending: 'Sending to ONA', unconfirmed: 'Acceptance unconfirmed', 'not-accepted': 'Handoff failed', accepted: 'Sent to ONA' }[status];
+    return { inbox: 'Prepare for ONA', preparing: 'Preparing', ready: 'Ready to send', sent: 'Sent to ONA' }[task.preparation.phase];
+  }
   if (isClosed(task)) return { done: "Done", rejected: "Rejected", cancelled: "Cancelled" }[task.status as "done" | "rejected" | "cancelled"];
   if (task.intent === "cancel") return "Cancelling";
   if (task.intent === "pause") return "Pausing";
@@ -37,6 +45,7 @@ export function matchesFilter(
 ): boolean {
   if (filter === "review") return needsReview(task);
   if (filter === "closed") return isClosed(task);
+  if (filter === 'active' && task.preparation) return ['sending','unconfirmed'].includes(task.preparation.attempts.at(-1)?.status ?? '');
   if (filter === "active")
     return ["triaging", "queued", "running", "blocked"].includes(task.status);
   return true;

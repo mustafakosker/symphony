@@ -39,3 +39,11 @@ it("keeps a cancelled task with an historical pending review out of attention co
   expect(matchesFilter(task, "closed")).toBe(true);
   expect(task.reviews[0].decision).toBeNull();
 });
+
+it('labels and filters Jira preparation separately from generic workflow reviews', async () => {
+ const {jiraTask,artifact}=await import('../../server/preparation/testing');const task=jiraTask();
+ expect(needsReview(task)).toBe(true);expect(statusLabel(task)).toBe('Prepare for ONA');
+ task.status='blocked';task.preparation!.attempts=[{requestId:'one',packageRef:artifact('jira-package'),payloadDigest:'a'.repeat(64),dispatch:1,status:'unconfirmed',receipt:null,reason:'unknown'}];
+ expect(matchesFilter(task,'active')).toBe(true);expect(needsReview(task)).toBe(false);
+ task.status='done';expect(statusLabel(task)).toBe('Sent to ONA');expect(matchesFilter(task,'closed')).toBe(true);
+});

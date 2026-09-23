@@ -39,7 +39,7 @@ export default function Inbox({
   const visible = tasks.filter(
     (task) =>
       matchesFilter(task, filter) &&
-      `${task.title} ${task.idea} ${task.type} ${task.source}`
+      `${task.title} ${task.idea} ${task.type} ${task.source} ${task.preparation?.source.description ?? ""}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
@@ -121,7 +121,7 @@ export default function Inbox({
               <span className="task-id">{task.source}</span>
             </div>
             <div className="task-title">{task.title}</div>
-            <div className="task-excerpt">{task.idea}</div>
+            <div className="task-excerpt">{task.preparation?.source.description ?? task.idea}</div>
             <div className="row-bottom">
               <span className={`status status-${task.status}`}>
                 <i />

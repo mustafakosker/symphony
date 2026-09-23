@@ -369,3 +369,18 @@ it("routes cancellation through the coordinator and keeps partial output links",
   expect(boundary.command).toHaveBeenCalledWith(expect.objectContaining({ taskId: current.id, expectedRevision: 1, action: { kind: "cancel" } }));
   expect(await screen.findByRole("link", { name: "notes · v2" })).toHaveAttribute("href", `/api/tasks/${current.id}/artifacts/notes?version=2`);
 });
+
+it('waits for the selected Jira upload before switching to another task', async () => {
+ const {jiraTask,artifact}=await import('../server/preparation/testing');const user=userEvent.setup();let current=jiraTask();
+ let release!:(task:typeof current)=>void;const upload=new Promise<typeof current>(resolve=>{release=resolve;});
+ const load=async()=>({tasks:[current,second],issues:[],coordinator:'ready' as const,jira:{enabled:true,simulated:true as const,syncing:false,lastSuccessAt:null,error:null,targets:[]}});
+ const jiraApi={detail:async()=>({taskId:current.id,revision:current.revision,promptText:''}),sync:vi.fn(),command:vi.fn(),upload:vi.fn((_command:import('../shared/jira-preparation').UploadCommand,_file:File)=>upload)};
+ render(<App api={api(load)} preparationApi={jiraApi}/>);
+ await user.upload(await screen.findByLabelText('Design document'),new File(['design'],'design.md'));
+ await user.click(screen.getByRole('button',{name:/Review webhook retries/}));
+ expect(screen.getByRole('main',{name:'Jira task details'})).toBeInTheDocument();
+ current={...current,revision:2,preparation:{...current.preparation!,documents:{design:{role:'design',filename:'design.md',size:6,ref:artifact()},implementation:null}}};
+ const {act}=await import('@testing-library/react');await act(async()=>{release(current);await upload;});
+ await waitFor(()=>expect(screen.getByRole('main',{name:'Task details'})).toBeInTheDocument());
+ expect(jiraApi.upload.mock.calls[0][0].taskId).toBe(current.id);
+});

@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import JiraTaskDetail from './components/jira/JiraTaskDetail';
+import { preparationApi as defaultPreparationApi, type PreparationApi } from './tasks/preparationApi';
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, CircleHelp, Command, Sparkles, X } from "lucide-react";
 import Inbox, { type Filter } from "./components/Inbox";
 import NewTaskDialog from "./components/NewTaskDialog";
@@ -28,8 +30,14 @@ function preferences(): { selectedId: string | null; filter: Filter } {
   }
   return { selectedId: null, filter: "all" };
 }
-export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
+export default function App({ api = workspaceApi, preparationApi = defaultPreparationApi }: { api?: WorkspaceApi; preparationApi?: PreparationApi }) {
   const workspace = useWorkspace(api);
+  const leaveGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const registerLeaveGuard = useCallback((guard: (() => Promise<boolean>) | null) => { leaveGuard.current = guard; }, []);
+  const navigate = async (next: () => void) => { if (!leaveGuard.current || await leaveGuard.current()) next(); };
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const syncJira = async () => { setSyncing(true); setSyncError(null); try { const view = await preparationApi.sync(crypto.randomUUID()); setSyncError(view.error); await workspace.refresh(); } catch (error) { setSyncError(error instanceof Error ? error.message : 'Jira sync unavailable'); } finally { setSyncing(false); } };
   const [initial] = useState(preferences);
   const [selectedId, setSelectedId] = useState(initial.selectedId);
   const [query, setQuery] = useState("");
@@ -59,7 +67,7 @@ export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
           href="#"
           onClick={(event) => {
             event.preventDefault();
-            setMobileDetail(false);
+            void navigate(() => setMobileDetail(false));
           }}
           aria-label="Symphony home"
         >
@@ -143,6 +151,7 @@ export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
           {issue.message}
         </div>
       ))}
+      {workspace.view?.jira && <div className="jira-sync-bar"><span>Jira inbox · Mock integration</span><span>{workspace.view.jira.lastSuccessAt ? `Last synced ${new Date(workspace.view.jira.lastSuccessAt).toLocaleString()}` : 'Not synced yet'}</span><button className="text-button" disabled={!workspace.connected || syncing || workspace.view.jira.syncing} onClick={() => void syncJira()}>{syncing ? 'Syncing Jira…' : 'Refresh Jira'}</button>{(syncError || workspace.view.jira.error) && <span role="alert">{syncError || workspace.view.jira.error} · Showing last known issues.</span>}</div>}
       <div className={`workspace-body ${mobileDetail ? "show-detail" : ""}`}>
         <Inbox
           tasks={tasks}
@@ -150,15 +159,16 @@ export default function App({ api = workspaceApi }: { api?: WorkspaceApi }) {
           query={query}
           filter={filter}
           onSelect={(id) => {
-            setSelectedId(id);
-            setMobileDetail(true);
+            void navigate(() => { setSelectedId(id); setMobileDetail(true); });
           }}
           onQuery={setQuery}
           onFilter={setFilter}
           onNew={() => setCreating(true)}
           canSubmit={workspace.connected}
         />
-        {task ? (
+        {task?.preparation ? (
+          <JiraTaskDetail key={task.id} task={task} connected={workspace.connected} targets={workspace.view?.jira?.targets ?? []} api={preparationApi} mutateTask={workspace.mutateTask} onBack={() => void navigate(() => setMobileDetail(false))} registerLeaveGuard={registerLeaveGuard} />
+        ) : task ? (
           <TaskDetail
             key={task.id}
             task={task}
