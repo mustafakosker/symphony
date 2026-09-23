@@ -54,11 +54,11 @@ export function createHandoffService({store,registry,operations,adapter,timeoutM
    let timer:ReturnType<typeof setTimeout>|undefined;
    let outcome:OnaOutcome;
    try {
+    controller.signal.throwIfAborted();
     const aborted=new Promise<never>((_,reject)=>{
      if(controller.signal.aborted) reject(new Error('Handoff interrupted'));
      else controller.signal.addEventListener('abort',()=>reject(new Error('Handoff interrupted')),{once:true});
     });
-    controller.signal.throwIfAborted();
     timer=setTimeout(()=>controller.abort(),timeoutMs);
     outcome=await Promise.race([launch?adapter.launch(launch,controller.signal):adapter.lookup(attempt.requestId,controller.signal),aborted]);
    } catch {outcome={kind:'unknown',reason:'ONA acceptance is unconfirmed. Check the existing request before retrying.'};}
