@@ -2,7 +2,7 @@
 
 ## Status and intended outcome
 
-The user approved the proposed flow on 2026-09-23: save an idea, resolve projects in the background, then ask for review before investigation starts. This written specification is awaiting review. Product implementation and implementation planning have not started.
+The user approved the proposed flow and this written specification on 2026-09-23: save an idea, resolve projects in the background, then ask for review before investigation starts. The [implementation plan](../plans/2026-09-23-async-idea-project-review.md) is ready for review. Product implementation has not started; plan review and execution-method selection are still required.
 
 Success means the idea popup closes after durable capture without waiting for project discovery, the saved idea remains visible while resolution runs, and the user can review the result later. Reloading the browser or restarting the coordinator must not lose the idea, bypass review, or create duplicate tasks. The review checkpoint applies even to unambiguous matches and projectless results.
 
