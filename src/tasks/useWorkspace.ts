@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Command, WorkspaceView } from "../../shared/contracts";
+import type { Command, Task, WorkspaceView } from "../../shared/contracts";
 import { ApiError, workspaceApi, type WorkspaceApi } from "./api";
 
 function isUnavailable(cause: unknown): boolean {
@@ -13,6 +13,7 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
   refresh(): Promise<void>;
   submit(markdown: string): Promise<void>;
   act(command: Command): Promise<void>;
+  mutateTask(operation: () => Promise<Task>): Promise<Task>;
   submissionId: string | null;
 } {
   const [view, setView] = useState<WorkspaceView | null>(null);
@@ -44,7 +45,7 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
         mutation === mutationGeneration.current &&
         !mutationInFlight.current
       ) {
-        setView(loaded);
+        setView(current => current ? { ...loaded, tasks: loaded.tasks.map(task => { const prior = current.tasks.find(t => t.id === task.id); return prior && prior.revision > task.revision ? prior : task; }) } : loaded);
         setConnected(true);
         setSubmissionId((current) =>
           current &&
@@ -125,8 +126,8 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
     [api, connected],
   );
 
-  const act = useCallback(
-    async (command: Command) => {
+  const mutateTask = useCallback(
+    async (operation: () => Promise<Task>) => {
       if (!connected) throw new Error("Coordinator unavailable");
       ++mutationGeneration.current;
       ++latestRequest.current;
@@ -135,14 +136,14 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
       mutationInFlight.current = true;
       retainConflict.current = false;
       try {
-        const updated = await api.command(command);
+        const updated = await operation();
         if (mounted.current) {
           setView((current) =>
             current
               ? {
                   ...current,
                   tasks: current.tasks.map((task) =>
-                    task.id === updated.id ? updated : task,
+                    task.id === updated.id && updated.revision >= task.revision ? updated : task,
                   ),
                 }
               : current,
@@ -152,6 +153,7 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
         ++mutationGeneration.current;
         mutationInFlight.current = false;
         await refresh();
+        return updated;
       } catch (cause) {
         ++mutationGeneration.current;
         mutationInFlight.current = false;
@@ -171,7 +173,8 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
         throw cause;
       }
     },
-    [api, connected, refresh],
+    [connected, refresh],
   );
-  return { view, connected, error, refresh, submit, act, submissionId };
+  const act = useCallback(async (command: Command) => { await mutateTask(() => api.command(command)); }, [api, mutateTask]);
+  return { view, connected, error, refresh, submit, act, mutateTask, submissionId };
 }

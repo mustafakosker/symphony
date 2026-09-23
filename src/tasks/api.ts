@@ -19,7 +19,7 @@ export class ApiError extends Error {
   }
 }
 
-async function read<T>(response: Response): Promise<T> {
+export async function read<T>(response: Response): Promise<T> {
   const body: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
     const value =

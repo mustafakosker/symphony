@@ -330,3 +330,12 @@ it("continues polling after an explicit refresh supersedes a stalled GET", async
   });
   expect(result.current.view?.tasks[0].title).toBe("Polled");
 });
+
+it('never regresses an accepted task revision from a stale poll or older mutation', async () => {
+ const api:WorkspaceApi={load:async()=>base,command:vi.fn(),submit:vi.fn()};
+ const {result}=renderHook(()=>useWorkspace(api));await waitFor(()=>expect(result.current.connected).toBe(true));
+ await act(async()=>{await result.current.mutateTask(async()=>({...base.tasks[0],revision:5,title:'New'}));});
+ expect(result.current.view!.tasks[0].revision).toBe(5);
+ await act(async()=>{await result.current.mutateTask(async()=>({...base.tasks[0],revision:3,title:'Old'}));});
+ expect(result.current.view!.tasks[0].title).toBe('New');
+});
