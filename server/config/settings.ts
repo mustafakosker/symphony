@@ -7,13 +7,13 @@ export type Settings = {
   port: number; concurrency: number; scanMs: number; stableMs: number;
   runTimeoutMs: number; stopGraceMs: number; outputLimitBytes: number;
   allowedOrigin: string; environmentKeys: string[]; verifiedProfilesPath: string | null;
-  fileReviewsEnabled: boolean;
+  fileReviewsEnabled: boolean; jiraHandoffConfigPath?: string | null;
 };
 
 const defaults = { port: 4317, concurrency: 1, scanMs: 2000, stableMs: 2000,
   runTimeoutMs: 30 * 60 * 1000, stopGraceMs: 5000, outputLimitBytes: 10 * 1024 * 1024,
   allowedOrigin: 'http://127.0.0.1:4317', environmentKeys: [] as string[], verifiedProfilesPath: null as string | null,
-  fileReviewsEnabled: false };
+  fileReviewsEnabled: false, jiraHandoffConfigPath: null as string | null };
 
 async function binaryPath(input: string): Promise<string> {
   const candidates = input.includes('/') ? [input] : (process.env.PATH ?? '').split(delimiter).map(dir => resolve(dir, input));
@@ -52,5 +52,7 @@ export async function loadSettings(path: string): Promise<Settings> {
       !isAbsolute(settings.verifiedProfilesPath) || !settings.verifiedProfilesPath.startsWith(local + sep))) {
     throw new Error('verifiedProfilesPath must be inside localRoot, outside the synced task store');
   }
+  if (settings.jiraHandoffConfigPath !== null && (typeof settings.jiraHandoffConfigPath !== 'string' || !isAbsolute(settings.jiraHandoffConfigPath)))
+    throw new Error('jiraHandoffConfigPath must be an absolute path');
   return settings;
 }

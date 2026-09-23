@@ -1,0 +1,8 @@
+{
+  "mode": "mock",
+  "connectionId": "demo",
+  "fixturesPath": "/absolute/path/to/jira-issues.json",
+  "projectMappings": {
+    "APP": "example-sales"
+  }
+}

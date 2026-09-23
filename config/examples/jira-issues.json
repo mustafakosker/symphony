@@ -1,0 +1,44 @@
+[
+  {
+    "connectionId": "demo",
+    "issueId": "10001",
+    "key": "APP-1",
+    "url": "https://jira.example.test/browse/APP-1",
+    "projectKey": "APP",
+    "title": "Improve search latency",
+    "description": "Implement the attached search performance design.",
+    "acceptanceCriteria": null,
+    "status": "Open",
+    "assignedToCurrentUser": true,
+    "open": true,
+    "updatedAt": "2026-09-23T10:00:00Z"
+  },
+  {
+    "connectionId": "demo",
+    "issueId": "10002",
+    "key": "APP-2",
+    "url": "https://jira.example.test/browse/APP-2",
+    "projectKey": "APP",
+    "title": "Clarify export behavior",
+    "description": "Use the supplied design and implementation plan for the export change.",
+    "acceptanceCriteria": null,
+    "status": "Open",
+    "assignedToCurrentUser": true,
+    "open": true,
+    "updatedAt": "2026-09-23T10:00:00Z"
+  },
+  {
+    "connectionId": "demo",
+    "issueId": "10003",
+    "key": "UNMAPPED-3",
+    "url": "https://jira.example.test/browse/UNMAPPED-3",
+    "projectKey": "UNMAPPED",
+    "title": "Update notifications",
+    "description": "Select the target repository before sending.",
+    "acceptanceCriteria": null,
+    "status": "Open",
+    "assignedToCurrentUser": true,
+    "open": true,
+    "updatedAt": "2026-09-23T10:00:00Z"
+  }
+]
