@@ -13,7 +13,8 @@
     "preview:fake": "node scripts/preview-fake.mjs",
     "test": "vitest",
     "format": "prettier --write src vite.config.ts index.html tsconfig.json",
-    "start:local": "CODEX_HOME=\"$PWD/.symphony-local/runtime/codex-home\" npm run start"
+    "start:local": "CODEX_HOME=\"$PWD/.symphony-local/runtime/codex-home\" npm run start",
+    "preview:jira": "node scripts/preview-jira.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.47.0",

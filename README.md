@@ -34,3 +34,11 @@ npm run build
 `npm run preview:fake` after build starts a disposable fake-only browser preview at `127.0.0.1:4321`; its task roots are temporary and removed on shutdown. The separate opt-in real CLI smoke is described in [operations](docs/coordinator-operations.md). Do not point that smoke at company repositories.
 
 This slice has been checked with temporary filesystem roots, a fake CLI subprocess, DOM tests and desktop/narrow Chrome browser checks. Real OneDrive sync behavior, company authentication and reverse proxy, deployment Codex credentials/profile permissions, and mutating external effects remain unverified. The built-in listener is local only; no public or mobile network deployment is supplied.
+
+### Jira to ONA (mock integration)
+
+The optional Jira inbox imports assigned-open issues, lets you attach a design document and implementation plan, and sends an explicitly reviewed prompt and repository target to a durable mock ONA adapter. There is no brainstorming step. Both files must be nonblank UTF-8 `.md` or `.txt`, at most 1 MiB each. Uploads and the saved launch prompt are handed off byte-for-byte.
+
+With Node 22+, run `npm run build && npm run preview:jira` for a disposable demo at `http://127.0.0.1:4323` (`SYMPHONY_PREVIEW_PORT` overrides the port). It includes inbox, incomplete, ready, accepted, unconfirmed, and rejected examples. It does not touch your normal workspace or run Codex. Stop with Ctrl-C to remove its temporary data.
+
+To enable the feature on an existing host, set the absolute `jiraHandoffConfigPath` in your Symphony config. See [example configuration](config/examples/README.md) and [operations](docs/coordinator-operations.md). The existing host still performs its normal Codex startup checks; the Jira preparation path itself never starts an agent. Real Jira/ONA connections, link/PDF/Word attachments, and merge-request follow-up are outside this version.
