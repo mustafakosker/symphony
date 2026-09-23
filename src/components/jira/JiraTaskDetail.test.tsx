@@ -218,3 +218,121 @@ it("refuses leaving after failed save and focuses the error", async () => {
   expect(allowed).toBe(false);
   await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
 });
+
+it("locks the editor immediately and recovers a lost Send through the visible status button", async () => {
+  const { act } = await import("@testing-library/react");
+  const user = userEvent.setup();
+  let current = jiraTask();
+  current.preparation!.target = {
+    projectId: "app",
+    repositoryId: "web",
+    branch: "main",
+  };
+  current.preparation!.prompt = {
+    ref: artifact("jira-prompt"),
+    revision: 1,
+    sourceDigest: "a".repeat(64),
+    nonblank: true,
+  };
+  for (const role of ["design", "implementation"] as const)
+    current.preparation!.documents[role] = {
+      role,
+      filename: role + ".md",
+      size: 5,
+      ref: artifact("jira-" + role),
+    };
+  const sent: import("../../../shared/jira-preparation").PreparationCommand[] =
+    [];
+  let rejectSend!: (e: Error) => void;
+  const delayed = new Promise<Task>((_, reject) => {
+    rejectSend = reject;
+  });
+  let update!: (task: Task) => void;
+  const api: PreparationApi = {
+    sync: vi.fn(),
+    upload: vi.fn(),
+    detail: async () => ({
+      taskId: current.id,
+      revision: current.revision,
+      promptText: "Reviewed instructions",
+    }),
+    command: async (c) => {
+      sent.push(c);
+      if (sent.length === 1) return delayed;
+      if (c.action.kind === "reconcile") {
+        current = { ...current, status: "done", revision: 4 };
+        current.preparation!.attempts[0] = {
+          ...current.preparation!.attempts[0],
+          status: "accepted",
+          reason: null,
+          receipt: {
+            requestId: current.preparation!.attempts[0].requestId,
+            receiptId: "mock-recovered",
+            acceptedAt: "2026-09-23T00:00:00Z",
+            simulated: true,
+          },
+        };
+      }
+      return current;
+    },
+  };
+  function Harness() {
+    const [task, setTask] = useState(current);
+    update = setTask;
+    return (
+      <JiraTaskDetail
+        task={task}
+        connected
+        targets={targets}
+        api={api}
+        mutateTask={async (work) => {
+          const t = await work();
+          setTask({ ...t });
+          return t;
+        }}
+        onBack={vi.fn()}
+        registerLeaveGuard={vi.fn()}
+      />
+    );
+  }
+  render(<Harness />);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Send to ONA" })).toBeEnabled(),
+  );
+  await user.click(screen.getByRole("button", { name: "Send to ONA" }));
+  expect(screen.getByLabelText("Launch prompt")).toBeDisabled();
+  expect(screen.getByLabelText("Branch")).toBeDisabled();
+  await user.type(screen.getByLabelText("Launch prompt"), "Do not add this");
+  expect(screen.getByLabelText("Launch prompt")).toHaveValue(
+    "Reviewed instructions",
+  );
+  await act(async () => {
+    rejectSend(new Error("Response lost"));
+  });
+  current = {
+    ...current,
+    revision: 3,
+    status: "blocked",
+    preparation: {
+      ...current.preparation!,
+      attempts: [
+        {
+          requestId: current.id + ":" + sent[0].requestId,
+          packageRef: artifact("jira-package"),
+          payloadDigest: "a".repeat(64),
+          dispatch: 1,
+          status: "unconfirmed",
+          receipt: null,
+          reason: "Unknown",
+        },
+      ],
+    },
+  };
+  act(() => update(current));
+  await user.click(
+    screen.getByRole("button", { name: "Check handoff status" }),
+  );
+  expect(await screen.findByText("mock-recovered")).toBeInTheDocument();
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[2].action.kind).toBe("reconcile");
+});

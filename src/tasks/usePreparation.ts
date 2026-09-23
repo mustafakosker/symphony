@@ -27,6 +27,7 @@ export function usePreparation({
     [target, setTargetState] = useState<Target | null>(
       task.preparation?.target ?? null,
     );
+  const [visibleRevision, setVisibleRevision] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
@@ -40,7 +41,9 @@ export function usePreparation({
     target: task.preparation?.target ?? null,
     dirty: false,
     generation: 0,
-    loaded: false,
+    visibleRevision: null as number | null,
+    editRevision: null as number | null,
+    rebaseOnRetry: false,
     autoBlocked: false,
   });
   const pending = useRef<Pending | null>(null),
@@ -69,12 +72,15 @@ export function usePreparation({
         target: task.preparation?.target ?? null,
         dirty: false,
         generation: 0,
-        loaded: false,
+        visibleRevision: null as number | null,
+        editRevision: null as number | null,
+        rebaseOnRetry: false,
         autoBlocked: false,
       };
       pending.current = null;
       running.current = null;
       errors.current = {};
+      setVisibleRevision(null);
       setText("");
       setTargetState(state.current.target);
       setDirty(false);
@@ -98,8 +104,9 @@ export function usePreparation({
           s.task.revision !== revision
         )
           return;
-        s.loaded = true;
         if (!s.dirty && !pending.current) {
+          s.visibleRevision = detail.revision;
+          setVisibleRevision(detail.revision);
           s.text = detail.promptText;
           s.target = s.task.preparation?.target ?? null;
           setText(s.text);
@@ -118,8 +125,28 @@ export function usePreparation({
       });
     return () => controller.abort();
   }, [task.id, task.revision, api]);
-  function setPromptText(value: string) {
+  function editingLocked() {
+    const p = pending.current;
+    const task = state.current.task;
+    return (
+      ["done", "cancelled"].includes(task.status) ||
+      ["sending", "unconfirmed"].includes(
+        task.preparation?.attempts.at(-1)?.status ?? "",
+      ) ||
+      (p?.kind === "command" &&
+        ["send", "retry", "reconcile", "cancel"].includes(
+          p.command.action.kind,
+        ))
+    );
+  }
+  function beginEdit() {
     const s = state.current;
+    if (!s.dirty) s.editRevision = s.visibleRevision ?? s.task.revision;
+    return s;
+  }
+  function setPromptText(value: string) {
+    if (editingLocked()) return;
+    const s = beginEdit();
     s.text = value;
     s.generation++;
     s.dirty = true;
@@ -127,7 +154,8 @@ export function usePreparation({
     setDirty(true);
   }
   function setTarget(value: Target | null) {
-    const s = state.current;
+    if (editingLocked()) return;
+    const s = beginEdit();
     s.target = value;
     s.generation++;
     s.dirty = true;
@@ -167,28 +195,41 @@ export function usePreparation({
         if (updated.revision >= s.task.revision) s.task = updated;
         pending.current = null;
         s.autoBlocked = false;
-        if (
-          p.kind === "command" &&
-          p.command.action.kind === "save" &&
-          p.generation === s.generation
-        ) {
-          s.dirty = false;
-          setDirty(false);
+        if (p.kind === "command" && p.command.action.kind === "save") {
+          s.rebaseOnRetry = false;
+          if (p.generation === s.generation) {
+            s.dirty = false;
+            s.editRevision = null;
+            setDirty(false);
+          } else {
+            // Edits typed while this save was in flight are based on that save's successor.
+            s.editRevision = p.command.expectedRevision + 1;
+          }
         }
         if (
-          p.kind === "command" &&
-          p.command.action.kind === "prepare" &&
-          !s.dirty
+          p.kind === "upload" ||
+          (p.kind === "command" &&
+            ["save", "prepare", "remove-document"].includes(
+              p.command.action.kind,
+            ))
         ) {
+          s.visibleRevision = null;
+          setVisibleRevision(null);
           const detail = await api.detail(id);
           if (
+            live.current &&
             state.current.id === id &&
+            detail.taskId === id &&
+            detail.revision === s.task.revision &&
             !s.dirty &&
-            detail.revision === s.task.revision
+            !pending.current
           ) {
             s.text = detail.promptText;
+            s.target = s.task.preparation?.target ?? null;
+            s.visibleRevision = detail.revision;
+            setVisibleRevision(detail.revision);
             setText(s.text);
-            s.loaded = true;
+            setTargetState(s.target);
           }
         }
         if (p.kind === "upload") updateUpload(p.command.role);
@@ -203,6 +244,13 @@ export function usePreparation({
               : message,
           );
           state.current.autoBlocked = true;
+          if (
+            p.kind === "command" &&
+            p.command.action.kind === "save" &&
+            cause instanceof ApiError &&
+            cause.status === 409
+          )
+            state.current.rebaseOnRetry = true;
           if (p.kind === "upload") updateUpload(p.command.role, message);
           // Transport failures retain the complete envelope. Definitive validation/conflict failures release it.
           if (cause instanceof ApiError && cause.status < 500)
@@ -226,12 +274,20 @@ export function usePreparation({
       command: {
         taskId: state.current.id,
         requestId: crypto.randomUUID(),
-        expectedRevision: state.current.task.revision,
+        expectedRevision:
+          action.kind === "save"
+            ? (state.current.editRevision ?? state.current.task.revision)
+            : state.current.task.revision,
         action,
       },
     };
   }
-  function save() {
+  function save(explicit = true) {
+    if (state.current.rebaseOnRetry) {
+      if (!explicit) return Promise.resolve(false);
+      state.current.editRevision = state.current.task.revision;
+      state.current.rebaseOnRetry = false;
+    }
     const p = pending.current;
     if (p && (p.kind !== "command" || p.command.action.kind !== "save")) {
       setError("Retry the pending action before saving changes.");
@@ -259,7 +315,7 @@ export function usePreparation({
       return false;
     }
     while (state.current.dirty) {
-      if (!(await save())) return false;
+      if (!(await save(false))) return false;
     }
     return !pending.current;
   }
@@ -277,6 +333,16 @@ export function usePreparation({
       setError("Retry the pending action first.");
       return Promise.resolve(false);
     }
+    if (
+      (kind === "send" || kind === "retry") &&
+      !pending.current &&
+      state.current.visibleRevision !== state.current.task.revision
+    ) {
+      setError(
+        "Wait for the current saved prompt and target to load before sending.",
+      );
+      return Promise.resolve(false);
+    }
     return execute(() => {
       const last = state.current.task.preparation?.attempts.at(-1);
       if ((kind === "retry" || kind === "reconcile") && !last)
@@ -287,6 +353,35 @@ export function usePreparation({
           : { kind },
       );
     });
+  }
+  async function reconcile() {
+    const retained = pending.current;
+    if (
+      retained?.kind === "command" &&
+      ["send", "retry"].includes(retained.command.action.kind)
+    ) {
+      const expectedRequest =
+        retained.command.action.kind === "retry"
+          ? retained.command.action.handoffRequestId
+          : `${retained.command.taskId}:${retained.command.requestId}`;
+      if (!(await execute(() => retained))) return false;
+      const latest = state.current.task.preparation?.attempts.at(-1);
+      if (!latest || latest.requestId !== expectedRequest) {
+        setError(
+          "The recovered handoff no longer matches this request. Review the refreshed task.",
+        );
+        return false;
+      }
+      if (latest.status === "accepted" || latest.status === "not-accepted")
+        return true;
+      if (latest.status === "sending") {
+        setError(
+          "ONA is still processing the saved request. Check again after it settles.",
+        );
+        return false;
+      }
+    }
+    return action("reconcile");
   }
   async function upload(role: DocumentRole, file: File) {
     if (pending.current?.kind === "upload") {
@@ -325,7 +420,7 @@ export function usePreparation({
   useEffect(() => {
     if (!dirty || busy || !connected || error || state.current.autoBlocked)
       return;
-    const timer = window.setTimeout(() => void save(), 500);
+    const timer = window.setTimeout(() => void save(false), 500);
     return () => window.clearTimeout(timer);
   });
   const unsaved =
@@ -335,6 +430,8 @@ export function usePreparation({
   return {
     promptText,
     target,
+    snapshotReady: visibleRevision === task.revision && !dirty,
+    editingLocked: editingLocked(),
     dirty,
     busy,
     error,
@@ -349,7 +446,7 @@ export function usePreparation({
     remove,
     send: () => action("send"),
     retry: () => action("retry"),
-    reconcile: () => action("reconcile"),
+    reconcile,
     cancel: () => action("cancel"),
     flush,
   };

@@ -189,3 +189,199 @@ it("aborts old detail on task switch, blocks disconnect and duplicate send", asy
     expect(await result.current.send()).toBe(false);
   });
 });
+
+it("keeps the edit base when another tab is polled before autosave", async () => {
+  const task = jiraTask(),
+    sent: PreparationCommand[] = [];
+  const api = {
+    ...apiFor(task),
+    command: async (c: PreparationCommand) => {
+      sent.push(c);
+      throw new ApiError("Task revision has changed", 409);
+    },
+  };
+  const { result, rerender } = renderHook(
+    ({ task }) => usePreparation({ task, connected: true, api, mutateTask }),
+    { initialProps: { task } },
+  );
+  await waitFor(() => expect(result.current.promptText).toBe("saved"));
+  act(() => result.current.setPromptText("tab A unsaved edit"));
+  rerender({ task: { ...task, revision: 2 } });
+  await act(async () => {
+    await result.current.save();
+  });
+  expect(sent[0].expectedRevision).toBe(1);
+  expect(result.current.promptText).toBe("tab A unsaved edit");
+  await act(async () => {
+    expect(await result.current.flush()).toBe(false);
+  });
+  expect(sent).toHaveLength(1);
+  await act(async () => {
+    await result.current.save();
+  });
+  expect(sent[1].expectedRevision).toBe(2);
+  expect(sent[1].requestId).not.toBe(sent[0].requestId);
+});
+it("blocks Send until the displayed prompt is loaded for the current task revision", async () => {
+  const task = jiraTask(),
+    first = deferred<PreparationDetail>(),
+    next = deferred<PreparationDetail>();
+  const api = {
+    ...apiFor(task),
+    detail: vi
+      .fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementation(() => next.promise),
+    command: vi.fn(async () => ({ ...task, revision: 3 })),
+  };
+  const { result, rerender } = renderHook(
+    ({ task }) => usePreparation({ task, connected: true, api, mutateTask }),
+    { initialProps: { task } },
+  );
+  await act(async () => {
+    expect(await result.current.send()).toBe(false);
+  });
+  expect(api.command).not.toHaveBeenCalled();
+  await act(async () =>
+    first.resolve({
+      taskId: task.id,
+      revision: 1,
+      promptText: "visible old prompt",
+    }),
+  );
+  rerender({ task: { ...task, revision: 2 } });
+  await act(async () => {
+    expect(await result.current.send()).toBe(false);
+  });
+  expect(api.command).not.toHaveBeenCalled();
+  await act(async () =>
+    next.resolve({
+      taskId: task.id,
+      revision: 2,
+      promptText: "visible new prompt",
+    }),
+  );
+  await act(async () => {
+    expect(await result.current.send()).toBe(true);
+  });
+  expect(api.command).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedRevision: 2 }),
+  );
+});
+it("refreshes the displayed draft after a lost-save replay returns a newer server draft", async () => {
+  const task = jiraTask();
+  let fail = true;
+  const api = {
+    ...apiFor(task),
+    detail: async () => ({
+      taskId: task.id,
+      revision: fail ? 1 : 3,
+      promptText: fail ? "saved" : "newer remote draft",
+    }),
+    command: async () => {
+      if (fail) throw new Error("Response lost");
+      return { ...task, revision: 3 };
+    },
+  };
+  const { result } = renderHook(() =>
+    usePreparation({ task, connected: true, api, mutateTask }),
+  );
+  await waitFor(() => expect(result.current.promptText).toBe("saved"));
+  act(() => result.current.setPromptText("my submitted draft"));
+  await act(async () => {
+    await result.current.save();
+  });
+  fail = false;
+  await act(async () => {
+    await result.current.save();
+  });
+  expect(result.current.promptText).toBe("newer remote draft");
+  expect(result.current.dirty).toBe(false);
+});
+it("locks setters immediately during Send but allows navigation after the saved handoff", async () => {
+  const task = jiraTask(),
+    gate = deferred<Task>(),
+    api = { ...apiFor(task), command: vi.fn(() => gate.promise) };
+  const { result } = renderHook(() =>
+    usePreparation({ task, connected: true, api, mutateTask }),
+  );
+  await waitFor(() => expect(result.current.promptText).toBe("saved"));
+  let sending!: Promise<boolean>;
+  act(() => {
+    sending = result.current.send();
+  });
+  act(() => {
+    result.current.setPromptText("too late");
+    result.current.setTarget({
+      projectId: "other",
+      repositoryId: "repo",
+      branch: "new",
+    });
+  });
+  expect(result.current.promptText).toBe("saved");
+  expect(result.current.dirty).toBe(false);
+  await act(async () => {
+    gate.resolve({ ...task, revision: 3, status: "done" });
+    await sending;
+    expect(await result.current.flush()).toBe(true);
+  });
+  expect(api.command).toHaveBeenCalledTimes(1);
+});
+it("replays a lost Send envelope before reconciling the matching unconfirmed request", async () => {
+  const task = jiraTask();
+  let calls = 0;
+  const sent: PreparationCommand[] = [];
+  const uncertain = {
+    ...task,
+    revision: 3,
+    status: "blocked" as const,
+    preparation: {
+      ...task.preparation!,
+      attempts: [
+        {
+          requestId: task.id + ":send-original",
+          packageRef: {
+            id: "jira-package",
+            version: 1,
+            digest: "a".repeat(64),
+            path: "artifacts/jira-package.1.bin",
+          },
+          payloadDigest: "a".repeat(64),
+          dispatch: 1,
+          status: "unconfirmed" as const,
+          receipt: null,
+          reason: "unknown",
+        },
+      ],
+    },
+  };
+  const api = {
+    ...apiFor(task),
+    command: async (c: PreparationCommand) => {
+      sent.push(c);
+      if (++calls === 1) throw new Error("Response lost");
+      return c.action.kind === "reconcile"
+        ? { ...uncertain, revision: 4, status: "done" as const }
+        : uncertain;
+    },
+  };
+  const { result, rerender } = renderHook(
+    ({ task }) => usePreparation({ task, connected: true, api, mutateTask }),
+    { initialProps: { task } },
+  );
+  await waitFor(() => expect(result.current.promptText).toBe("saved"));
+  await act(async () => {
+    await result.current.send();
+  });
+  uncertain.preparation.attempts[0].requestId =
+    task.id + ":" + sent[0].requestId;
+  rerender({ task: uncertain });
+  await act(async () => {
+    expect(await result.current.reconcile()).toBe(true);
+  });
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[2].action).toEqual({
+    kind: "reconcile",
+    handoffRequestId: uncertain.preparation.attempts[0].requestId,
+  });
+});

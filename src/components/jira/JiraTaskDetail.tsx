@@ -35,7 +35,7 @@ export default function JiraTaskDetail({
     task.status === "cancelled" ||
     last?.status === "sending" ||
     last?.status === "unconfirmed";
-  const disabled = !connected || locked;
+  const disabled = !connected || locked || draft.editingLocked;
   const hasUploadError = Object.values(draft.uploadError).some(Boolean);
   useEffect(() => {
     registerLeaveGuard(async () => {
@@ -187,7 +187,8 @@ export default function JiraTaskDetail({
                 promptText={draft.promptText}
                 target={draft.target}
                 targets={targets}
-                disabled={disabled}
+                disabled={disabled || (!draft.snapshotReady && !draft.dirty)}
+                loading={!draft.snapshotReady && !draft.dirty}
                 dirty={draft.dirty}
                 busy={draft.busy}
                 onPrompt={draft.setPromptText}
@@ -213,6 +214,7 @@ export default function JiraTaskDetail({
                     draft.busy ||
                     draft.dirty ||
                     hasUploadError ||
+                    !draft.snapshotReady ||
                     !preparationReady(p)
                   }
                   onClick={() => void draft.send()}

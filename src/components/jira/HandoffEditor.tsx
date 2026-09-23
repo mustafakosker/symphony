@@ -6,6 +6,7 @@ export default function HandoffEditor({
   disabled,
   dirty,
   busy,
+  loading = false,
   onPrompt,
   onTarget,
   onSave,
@@ -16,6 +17,7 @@ export default function HandoffEditor({
   disabled: boolean;
   dirty: boolean;
   busy: boolean;
+  loading?: boolean;
   onPrompt: (value: string) => void;
   onTarget: (value: Target | null) => void;
   onSave: () => void;
@@ -25,11 +27,13 @@ export default function HandoffEditor({
       <div className="jira-section-heading">
         <h3>Launch instructions</h3>
         <span role="status">
-          {busy
-            ? "Saving or sending…"
-            : dirty
-              ? "Unsaved changes"
-              : "Draft saved"}
+          {loading
+            ? "Loading saved draft…"
+            : busy
+              ? "Saving or sending…"
+              : dirty
+                ? "Unsaved changes"
+                : "Draft saved"}
         </span>
       </div>
       <p>Review the prompt and target before sending your documents to ONA.</p>
