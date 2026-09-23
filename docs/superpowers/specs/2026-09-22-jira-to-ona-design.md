@@ -1,175 +1,145 @@
-# Jira preparation and ONA handoff
+# Jira documents and ONA handoff
 
 ## Status and intended outcome
 
-The user approved the interaction flow and architecture in conversation on 2026-09-22. This document records that design for written review. Implementation planning begins only after the user approves this specification; implementation follows review of the resulting plan and selection of its execution method.
+Revised on 2026-09-23 following the user's request to remove brainstorming and attach externally prepared design and implementation documents before sending to ONA. The user approved this revised specification and requested an implementation plan. This revision supersedes the earlier conversational preparation design. Implementation awaits review of the plan and selection of its execution method.
 
-Symphony should bring open Jiras assigned to the user into their inbox, help them turn a ticket into an implementation prompt, and send the reviewed prompt to ONA. A sufficiently clear ticket can go directly to prompt preparation. An unclear ticket can first become a conversation with Codex, with additional user context and repository investigation.
+Symphony brings open Jiras assigned to the user into their inbox. The user opens a ticket, attaches their design and implementation documents, reviews an editable launch prompt and target repository, and explicitly sends the complete package to ONA. Success is a persisted receipt for the exact package reviewed, not completed implementation or an existing merge request.
 
-The user explicitly selected real Codex for brainstorming and GitLab repository access through MCP. Jira intake and ONA handoff are mocked for this slice behind replaceable server adapters. Success is a persisted, inspectable handoff of the exact prompt the user reviewed. It does not mean implementation finished or a merge request exists.
+Jira intake and ONA handoff remain mocked behind replaceable server adapters. This flow requires no local Codex execution, conversational agent, generated plan, or GitLab repository investigation. Codex execution belongs downstream in ONA when the real integration is added.
 
-## Scope and selected approach
+The approved first version uses local uploads of Markdown or plain-text documents. Link acquisition and PDF/Word conversion are outside this first version.
 
-Add a focused Jira preparation mode to existing Symphony tasks. Reuse its task store, inbox, command boundary, Codex subprocess runner, repository configuration, and recovery infrastructure. Preparation has a fixed lifecycle rather than the generic triage/workflow/artifact approval sequence.
+## Scope and approach
 
-The alternatives considered were using the existing general workflow unchanged, which adds approval friction to conversation, and building a separate launcher, which duplicates task history and persistence. The focused mode keeps the new interaction small while retaining the existing execution foundation.
+Use a focused Jira handoff mode within existing Symphony tasks, reusing the inbox, task store, versioned artifacts, repository configuration, command boundary, and durable recovery patterns. Keep the entire preparation experience in the Jira task page.
 
 Included:
 
-- Automatic intake of assigned open Jiras, refresh, stable identity, and source details.
-- Real, persisted brainstorming with read-only GitLab MCP investigation.
-- Direct prompt preparation without a preceding conversation.
-- Saved generated prompt versions and a separately editable working draft.
-- Review of the target repository, branch, and exact prompt before explicit submission.
-- Mock ONA acceptance, receipts, retry, and reconciliation of uncertain outcomes.
+- Automatic intake of assigned open Jira tickets and manual refresh.
+- Separate Design document and Implementation plan attachment slots.
+- Saved attachments, an editable launch prompt, and repository/branch selection.
+- Explicit submission of a frozen package containing the Jira context, both documents, the exact prompt, and target.
+- A mock ONA receipt, definitive-failure retry, and uncertain-outcome reconciliation.
 
 Excluded:
 
-- Real Jira and ONA connectors, integration discovery, and credential-management UI.
-- Jira creation, comments, status changes, or other Jira writes.
-- Running implementation in ONA, actually opening a GitLab merge request, PR polling, review, merge, or deployment.
-- Local implementation worktrees, a workflow editor, and a general chat platform.
-- Implementing the separately specified Symphony UI replacement as part of this feature.
+- Brainstorming, chat, AI document analysis, prompt generation by an agent, and local Codex runs for these tasks.
+- GitLab MCP investigation or source-code checkout before sending.
+- Real Jira/ONA connectors, integration-management UI, and credential setup.
+- Jira creation or updates; running implementation, opening or tracking merge requests, merging, or deployment.
+- The separately specified Symphony UI redesign and a general document-management system.
 
-The downstream prompt may instruct the ONA agent to implement, test, and open a GitLab merge request. This slice only prepares and hands off those instructions.
+Existing generic Symphony workflows remain unchanged. The editable launch prompt can request implementation, tests, and a GitLab merge request from the downstream ONA agent; the mock does not perform those actions.
 
 ## User flow
 
-### Inbox and Jira details
+### 1. Open a Jira from the inbox
 
-When Jira intake is enabled, perform a sync at server startup and every 60 seconds, with a manual Refresh Jira action. These requests use the same serialized sync operation. A failed sync retains the previous results and exposes the error and last successful sync time.
+When explicitly enabled, sync Jira at server startup, every 60 seconds, and through Refresh Jira. Serialize sync operations. Fetch a complete normalized snapshot of tickets assigned to the adapter's configured current user and considered open by that source. Identify a ticket by connection plus immutable issue ID, rather than its displayed issue key.
 
-The adapter returns a complete normalized snapshot of tickets that are assigned to its configured current user and considered open by that source. The mock explicitly supplies these eligibility fields; the UI does not interpret arbitrary Jira status names. Identity is the configured Jira connection plus immutable issue ID. The displayed issue key is not the deduplication key.
+New rows show the Jira key, title, source status, and local preparation status. Opening one displays the description, acceptance criteria when supplied, source link, attachments, launch prompt, and target. Importing, opening, editing, or attaching documents starts no agent.
 
-New items appear in the existing inbox with Jira key, title, source status, and preparation status. Opening one displays its description, acceptance criteria when provided, original Jira link, and selected repository if known. Importing or opening a task does not launch Codex.
+Update the latest source snapshot for nonterminal tasks without replacing saved documents or prompt edits. Keep the original brief and source versions referenced by a submitted package. If a successful complete sync omits a previously imported ticket, retain its task with a notice that it no longer matches the assigned-open query. Failed or incomplete syncs cannot establish absence. Accepted and cancelled tasks keep their final snapshots and still prevent duplicate reimport.
 
-Refresh updates the latest Jira snapshot for nonterminal tasks, without replacing the original task brief, messages, prompt drafts, or receipts. Runs and generated prompts record which source snapshot they used. If a successful complete sync no longer includes an imported nonterminal issue, retain its task and mark it as no longer in the assigned-open query. Failed or incomplete syncs do not establish absence. Retained nonterminal tasks remain usable, with their source freshness visible. Accepted and cancelled tasks retain their final source snapshot; their identities still prevent reimport as new tasks.
+### 2. Attach the documents
 
-### Brainstorming
+Provide two clearly labeled slots: Design document and Implementation plan. Each accepts one nonempty UTF-8 .md or .txt file, up to 1 MiB. Both are required before sending. Show the chosen filename, size, upload/save state, and access to the exact saved content.
 
-Brainstorm opens the conversation and starts the first Codex turn using the Jira snapshot. The user can then answer questions or add context. Codex can inspect the selected GitLab repository through its configured read-only MCP access, explain findings, and ask focused questions. Repository findings include file paths and the inspected commit when available.
+Uploading persists the bytes as an immutable versioned artifact. Replacing a slot selects a new version; removing an attachment clears the selection while preserving historical artifacts. The active selections survive refresh. A failed replacement leaves the previous selected version intact and clearly reports the failure. The latest selected files must be explicitly visible before sending.
 
-There is at most one queued or running turn per task. Each turn persists the user input and its context before execution. The interface distinguishes queued, running, completed, and failed turns. Show the final conversational response and expose existing run output separately; token-by-token chat streaming is not required.
+Render document previews as escaped plain text, and offer downloads. Original filenames are display metadata, never filesystem paths. Validate supported format, byte size, and UTF-8 content on the server. Do not summarize, rewrite, or judge the completeness of the documents.
 
-The user chooses Prepare for ONA when ready. The agent may suggest that action, but cannot send the task. There is no mandatory number of conversation turns or separate workflow approval.
+### 3. Review the launch prompt and target
 
-### Direct preparation and repository selection
+Initialize a saved, editable prompt from a fixed template when the user first prepares the handoff. For example: implement the linked Jira according to the attached design and implementation plan, run the plan's checks, and open a GitLab merge request with a summary and test results. This is deterministic template text; no agent generates it.
 
-Prepare for ONA is also available immediately from the Jira details. It runs real Codex once to draft a useful implementation prompt using the Jira and any saved context. It can inspect the selected repository. Missing requirements become explicit questions or assumptions, never fabricated decisions; the user can return to brainstorming or resolve them in the editor.
+Show the complete prompt beside the selected documents and Jira context. The user can add instructions or replace the text. Do not append hidden implementation instructions at send time or automatically rewrite the draft after an attachment or source change. Keep a visible reminder when the Jira changed since the draft was initialized.
 
-Use a configured Jira-project-to-Symphony-project mapping to suggest a repository. Select it automatically only when the mapping identifies one repository unambiguously. Otherwise allow selection from configured repositories. Discussion can begin without a repository; repository investigation and submission require a selected target. This slice hands off to one target repository per task.
+Suggest the repository through a configured Jira-project-to-Symphony-project mapping. Select automatically only when unambiguous; otherwise allow selection from configured repositories. This slice targets one repository. Default the target branch to its configured base branch and allow editing. No MCP lookup is performed, and the UI must not claim the repository or branch has been remotely verified.
 
-The branch defaults to the repository's configured base branch and is editable before submission. Resolve the selected branch through MCP for investigation and record the inspected commit. Keep the branch sent to ONA distinct from this historical evidence: recording an inspected SHA does not imply ONA will check out that exact SHA.
+Save prompt and target edits with visible saving/saved/error states. Preserve local text on failure and flush pending edits before leaving the form. Only saved data can be sent. Returning to the task restores saved attachments, prompt, and target.
 
-### Prompt review
+### 4. Send to ONA
 
-Both entry paths arrive at the same editor with the selected repository and branch. The generated prompt covers the Jira identity and problem, scope, agreed requirements, acceptance criteria, relevant repository findings, constraints, verification expectations, remaining assumptions, and the requested downstream implementation/merge-request outcome.
+The review surface shows the exact prompt, both selected document versions, Jira snapshot, repository, and branch. Send to ONA is the explicit launch action; no additional generic workflow or artifact approval sequence is needed.
 
-The complete effective implementation prompt is visible and editable. Do not append hidden task instructions or regenerate content during submission. Repository and branch are separate, visible launch parameters.
+Require both successfully saved documents, a nonblank saved prompt, a configured repository, and a nonblank branch. Disable sending while an upload/save is pending or failed, the server is disconnected, or a handoff is sending, unconfirmed, or accepted.
 
-Persist the working draft with a visible saving/saved/error state. Flush pending edits when leaving the editor or sending. If saving fails, retain the local text, show the error, and prevent submission until it is saved. Server drafts survive refresh; unsaved text is never presented as saved.
+Persist the frozen package before calling the adapter. Bind its task and request IDs, creation time, Jira identity and exact source snapshot, prompt revision/text, document roles and immutable artifact references/digests, and repository/branch. Verify document bytes against their digests before launch. The adapter receives the prompt and the actual document contents, not host-local paths that an ONA environment cannot access.
 
-Keep generated versions immutable. The first generated version initializes an empty editor. Later generations appear as candidates with an explicit Use this version action; they never replace an existing working draft automatically. Returning to brainstorming, changing the target, or receiving changed Jira content retains edits and marks the prompt as needing review. Opening the editor clears that review reminder, but never sends automatically. Show when the source snapshot used to generate the draft differs from the latest Jira snapshot.
+The eventual live adapter is responsible for materializing both files into the ONA environment and making their locations available to its Codex run. Its accepted response must mean that the complete package has been accepted for execution. Transfer mechanics and the live connector are outside this mock implementation.
 
-### Send and receipt
+### 5. Inspect the receipt
 
-Send to ONA submits the saved prompt and visible target. Disable it while a turn is active, a save is pending or failed, the server is disconnected, or a handoff is sending, unconfirmed, or already accepted. Require a nonblank prompt, a configured repository, and a nonblank target branch.
+On acceptance, show Sent to ONA, the accepted time, receipt ID, exact submitted prompt, target, and both submitted document versions. The mock is labeled Simulated ONA handoff and does not invent a working environment or merge-request URL.
 
-Persist a frozen launch payload before calling the adapter. It binds the task, Jira identity, the draft's originating source snapshot and latest source snapshot at submission, prompt revision and exact text, target repository and branch, creation time, and stable handoff request ID. The adapter receives this payload unchanged.
+Sent tasks remain inspectable but cannot be edited or resubmitted in this slice. This is the end of the workflow; it does not indicate that implementation finished.
 
-On acceptance, show Sent to ONA with the receipt, accepted time, and submitted prompt. Show an environment link only if the adapter returns a real usable link. The mock clearly says Simulated ONA handoff and provides no fabricated working environment or PR link. Sent tasks remain inspectable and cannot be resubmitted in this slice.
+## State and persistence
 
-## Lifecycle and existing task compatibility
+The lifecycle is Inbox → Preparing → Ready to send → Sent to ONA, with Sending, Failed, and Handoff unconfirmed substates. Ready to send means the required saved fields and attachments are present, not that an agent validated the documents.
 
-The preparation lifecycle is Inbox, Preparing, Ready to send, and Sent to ONA. Sending, failed, and unconfirmed are handoff substates. Preparing includes both active agent work and waiting for another user message. Ready to send means a prompt draft exists; it is not an assertion that the agent has proven every requirement complete.
+Add an optional, explicitly validated handoff preparation payload to the existing version-1 task format. Its presence identifies this mode. Store source snapshots, active document references, working prompt/revision, target, phase, and handoff attempts. Document and prompt bodies use existing versioned artifacts. Do not add conversation, turn, or generated-plan state.
 
-Add an optional, explicitly validated preparation payload to the existing version-1 task format. Its presence identifies this mode; legacy records without it retain their existing behavior. The payload holds source snapshots, selection, preparation phase, conversation/turn references, prompt references, working-draft revision, and handoff attempts. Store large message and prompt bodies as existing versioned artifacts and reference them from task events. Historical source snapshots must also remain available when referenced by a run or receipt.
+Preserve existing revision checks, operation IDs, serialized task writes, event history, atomic publication, and artifact digests. Legacy tasks without this payload retain their current behavior; no destructive migration is needed. Reference artifacts in durable events only after their bytes are successfully published.
 
-Continue using the existing task revision, serialized writes, operation IDs, durable events, artifact digests, and atomic publication rules. Missing preparation fields in legacy records require no destructive migration. New mode validation must reject inconsistent state rather than silently discard its fields.
-
-Map the preparation mode into shared task statuses for scheduling and filters:
-
-| Preparation condition | Shared status | Display |
+| Condition | Shared status | Display |
 | --- | --- | --- |
-| Imported or awaiting user input | waiting-for-human | Inbox or Preparing |
-| Turn awaiting execution | queued | Preparing: queued |
-| Turn executing | running | Preparing |
-| Prompt review selected, draft available, no active turn | waiting-for-human | Ready to send |
-| Handoff pending | running | Sending to ONA |
-| Execution failure or uncertain handoff | blocked | Specific failure or Handoff unconfirmed |
-| Handoff accepted | done | Sent to ONA |
-| User cancellation before submission | cancelled | Cancelled |
+| Imported, no preparation changes | waiting-for-human | Inbox |
+| Attachments or required fields incomplete | waiting-for-human | Preparing |
+| Required documents, prompt, and target saved | waiting-for-human | Ready to send |
+| Submission pending | running | Sending to ONA |
+| Definitive failure or unknown acceptance | blocked | Send failed or Handoff unconfirmed |
+| Package accepted | done | Sent to ONA |
+| Cancelled before sending | cancelled | Cancelled |
 
-For this mode, Needs review includes unanswered agent questions, prompt drafts awaiting action, and failures needing intervention. Imported Inbox items remain visible in All tasks without implying an agent review has occurred. Closed includes accepted and cancelled tasks. Preparation-aware labels must show Sent to ONA rather than imply that implementation is done.
+Needs review includes prepared packages awaiting submission and handoff failures needing attention. Incomplete tasks remain reachable in All tasks. Closed includes accepted and cancelled tasks. Mode-specific labels must avoid describing an accepted handoff as completed implementation.
 
-Generic triage and workflow scheduling must skip preparation tasks. Their UI exposes conversation, prompt, and handoff actions instead of generic workflow approval, insert-review, or local implementation controls. Existing generic tasks and synced-file reviews keep their current behavior. Preparation conversations and prompt approval are handled in the UI; adding them to the synced-file review protocol is out of scope.
+Generic triage, Codex scheduling, and synced-file review processing skip these tasks. Their page exposes document, prompt, target, send, retry, reconciliation, and eligible cancellation controls. Cancellation before launch is allowed; it cannot claim to cancel an environment once sending begins. Editing is locked while sending or acceptance is unknown, preserving the package being reconciled.
 
-Cancellation can stop a queued or running read-only preparation turn using the existing process controls. It cannot claim to cancel an environment after a handoff has begun. Reconciliation remains available for an unconfirmed handoff.
+## Component and API boundaries
 
-## Components and interfaces
+### Jira intake
 
-### Jira adapter and intake service
+A server adapter returns normalized assigned-open snapshots, with explicit completeness and mock/live designation. The intake service validates records and uses deterministic task identity from connection/issue ID plus idempotent creation operations to prevent duplicates across refresh and restart. Configuration is opt-in so demo tickets are not silently injected into an existing workspace.
 
-The server-owned Jira adapter provides a complete assigned-open snapshot with stable issue IDs, keys, links, project identifiers, titles, descriptions, acceptance criteria, source status, assignment eligibility, and source update times. It carries an explicit mock/live designation. This implementation supplies only the mock adapter.
+### Document and draft handling
 
-The intake service normalizes and validates results, persists source revisions, and creates or refreshes preparation tasks. Serialize syncs and use a deterministic task identity derived from the connection and immutable Jira ID, with idempotent creation operations, so restart or concurrent refresh cannot duplicate a task. No Codex launch occurs during sync.
+Use focused document-upload/preview and prompt/target editor components in the existing task page. The server owns selected document versions and saved draft state. Extend the HTTP boundary with a bounded upload operation and explicit revision-checked commands to select/remove documents, save the prompt, select a target, send, retry, reconcile, and cancel. Refresh Jira is a workspace command; task mutations use expected task revisions.
 
-### Preparation service and Codex execution
+Keep the existing global JSON request limit. A dedicated bounded file-upload operation handles documents separately rather than increasing limits for every API route. Preserve same-origin access checks and use server-generated artifact identities. Never use client-supplied paths as storage destinations.
 
-A dedicated preparation service owns mode-specific transitions and turn construction. It reuses the existing runner's process execution, bounded output, durable logs, timeouts, and profile verification. Use the existing read-only researcher role and configured MCP repository mappings. Reuse repository-ref resolution while selecting the user-reviewed target branch.
+Duplicate commands with identical IDs and content return their recorded outcome. Reuse of an ID with different content conflicts. Conflicting saves or uploads retain the user's input and display an actionable error without silently replacing a newer server version.
 
-Preparation requires its own prompt builder and validated turn-result schema; the generic workflow prompt currently instructs triage to propose a workflow. Select the prompt and schema by assignment mode while keeping existing generic assignments compatible. Turn results contain a conversational response, an optional question, an optional generated prompt, and repository evidence, or a structured failure. They cannot authorize a handoff.
+### ONA handoff
 
-Each turn receives the current Jira snapshot, saved conversation, user context, current draft when present, and selected repository evidence. Bind outputs to the originating turn and task generation. A cancelled, superseded, or mismatched result cannot update the task. Share the existing coordinator concurrency budget rather than creating an unbounded second execution pool.
+A dedicated service owns package freezing, validation, launch, and reconciliation. It calls a replaceable adapter exposing launch(package) and lookup(requestId). The stable request ID is the idempotency key. Lookup returns accepted with a receipt, definitively not accepted, or unknown; errors cannot count as proof of nonacceptance.
 
-Preserve bounded input/output limits. If accumulated context exceeds the supported limit, report a context-size error with the saved history and draft intact; do not silently truncate agreed requirements. The user can still review, edit, and send an existing draft. Automatic summarization is outside this slice.
+The mock keeps a durable ledger across restart. It accepts the complete document package without starting Codex or creating an environment. Deterministic test scenarios include acceptance, definitive rejection, and acceptance followed by a timeout. A future MCP/CLI connector implements the same contract.
 
-### Prompt and handoff services
+## Failure and recovery behavior
 
-Prompt edits are revision-checked commands. The handoff service freezes a saved revision and persists its request before invoking ONA. Source sync events cannot rewrite a frozen payload.
-
-The ONA adapter exposes launch(payload) and lookup(requestId). Launch uses the persisted request ID as its idempotency key. Lookup returns accepted with a receipt, definitively not accepted, or unknown. Adapter implementations must preserve these meanings; a lookup failure is unknown, not proof that launching is safe.
-
-The mock persists its request ledger across server restart and supports deterministic accepted, rejected, and accept-then-timeout scenarios for tests. It does not execute Codex or create an ONA environment. A future connector can translate the same contract to the user's MCP/CLI integrations without changing the preparation interaction.
-
-### API and UI boundaries
-
-Extend the existing same-origin HTTP API, workspace data boundary, and command submission mechanism with explicit preparation actions: sync Jira, begin/post a turn, prepare a prompt, save/select a draft, select a target, send, retry, reconcile, and cancel where eligible. User mutations carry request IDs and expected task revisions. Reject conflicting commands while retaining entered text for correction or retry.
-
-Create focused Jira details, conversation, prompt editor, and handoff receipt components inside the existing task page. Reuse inbox navigation, connection handling, and artifact/log access. Keep the feature compatible with the separately approved UI design without requiring that redesign to ship first. UI-only state includes the selected view and unsaved field text, not authoritative execution state.
-
-## Failure handling and recovery
-
-- A Jira failure keeps previous tasks visible and marks source data stale. It does not erase preparation work or launch agents.
-- A missing Codex profile, unavailable MCP connection, or inaccessible branch produces a specific blocked state. Preserve the existing profile verification rules; a filesystem read-only sandbox alone does not restrict remote MCP writes. The configured preparation profile must expose only the intended read operations.
-- Failed turns retain user messages and prior valid outputs. Explicit retry uses the saved turn inputs without duplicating the user message. Restart recovery must settle or terminate an orphaned process before another turn runs for that task.
-- Duplicate save, turn, and send commands with the same operation identity and content return the recorded outcome. Reusing an identity with different content is a conflict.
-- Persist send intent before the external call. After a timeout or crash around launch, show Handoff unconfirmed and lookup the original request. Never automatically submit a new request while acceptance is unknown.
-- Reconciliation to accepted records the original receipt. Definitively not accepted unlocks retry. Unknown retains the blocked state. An unchanged retry reuses the original key; edited content creates a new attempt only after nonacceptance is definitive.
-- Accepted handoffs are immutable. Preserve their prompt and target even if the Jira later changes.
-- During disconnection keep last-known data visible and disable mutations. Local field contents survive a failed command; reconnecting does not silently overwrite them.
-
-## Configuration and mock boundary
-
-Jira intake and mock ONA are explicitly enabled server-side; they do not silently inject demo tasks into an existing workspace. Mock source and handoff labels remain visible. Supply example configuration and fixtures for a clear ticket, an ambiguous ticket, and a ticket with repository mapping.
-
-Brainstorming still uses real Codex in this mixed setup. GitLab investigation uses the user's configured real MCP connection. Mock Jira fixtures must not imply successful access to a repository that is not configured. Automated tests and the disposable fake preview may substitute the existing fake runner, but the enabled product flow never silently falls back to simulated conversation.
-
-Credentials and connection configuration remain server-side in the existing profile/configuration system. Document setup requirements and identify missing configuration in the UI without adding an integration-management subsystem.
+- A Jira sync failure retains existing tasks and reports stale source data plus last successful sync time.
+- An invalid or failed upload retains previous selected documents, blocks sending while unresolved, and reports how to retry or discard the failed replacement.
+- A failed prompt/target save retains entered text. Disconnecting retains last-known data and disables mutations.
+- Sending first records intent and the immutable package. A crash or timeout around launch leads to Handoff unconfirmed and lookup of the original request, never an automatic new launch.
+- Reconciliation to accepted saves the original receipt. Definitive nonacceptance allows retry; unknown stays blocked. Unchanged retry uses the original key. Editing after definitive nonacceptance creates a new package and request for the next send.
+- Duplicate clicks and process restarts cannot create multiple accepted environments for one request. Corrupt or missing document bytes block launch before the adapter is called.
+- Submitted packages preserve exact document versions, prompt, source context, and target despite later Jira changes.
 
 ## Verification and acceptance
 
-Use deterministic adapters and a fake runner for automated tests. Cover:
+Automated tests use deterministic Jira and ONA adapters; this mode needs no fake or real Codex runner. Cover:
 
-1. Assigned-open import, duplicate prevention across refresh/restart, query departure, failed sync, and preservation of conversation and draft edits.
-2. Both entry paths: direct preparation and multiple real-shaped conversation turns leading to a prompt.
-3. Repository mapping/selection, branch selection, MCP-access assignment construction, and provenance tied to the inspected commit.
-4. Conversation and saved-draft restoration, explicit replacement by generated versions, source refresh during editing, and stale revision rejection without lost text.
-5. Exact prompt and target submission, durable payload binding, repeated clicks, duplicate command replay, and disabled invalid actions.
-6. Definitive launch rejection, acceptance followed by timeout, restart recovery, unknown lookup, and reconciliation without a duplicate launch.
-7. Mode-specific scheduling and filtering, accepted/cancelled inspection, legacy task loading, and preservation of existing generic workflow behavior.
-8. Keyboard access, labeled controls, saving/busy/error states, narrow-screen usability, and unmistakable mock labels.
+1. Assigned-open import, duplicate prevention across refresh/restart, failed/incomplete sync, and preservation of saved documents and draft edits.
+2. Upload, preview/download, replace, remove, and restore both document roles; invalid formats, encoding, oversize files, and failed replacements.
+3. Required-field readiness, repository mapping, branch editing, and explicit mock labels without claiming live repository validation.
+4. Exact prompt/document bytes and target in the submitted package, digest verification, revision conflicts, and duplicate command handling.
+5. Definitive rejection, accept-then-timeout, restart recovery, unknown lookup, and reconciliation without duplicate submission.
+6. No Codex launches on import, open, upload, edit, or send; continued generic workflow behavior for legacy tasks.
+7. Keyboard access, saving/upload/error states, narrow-screen usability, disconnection, accepted-task inspection, and eligible cancellation.
 
-Run the full existing test suite and production build. Inspect the disposable preview for both paths and failure states. Separately exercise a real read-only Codex conversation and GitLab MCP lookup when the user's configured connection is available; report any missing configuration as a verification limitation rather than treating fake-runner coverage as proof of live access. No real ONA launch or GitLab write is part of verification.
+Run the existing full test suite and production build, then inspect the disposable preview for preparation, successful mock handoff, and failure/recovery states. No real ONA launch, GitLab write, or local Codex run is part of this feature's verification.
 
-Acceptance is an imported Jira that can be discussed with real Codex, investigated through configured GitLab MCP, turned into an editable prompt, and submitted exactly once to the mock ONA adapter, with a persisted and visibly simulated receipt. The experience ends at Sent to ONA.
+Acceptance is an imported Jira with the user's saved design and implementation documents, an editable launch prompt and target, and one explicit submission of that exact package to the mock ONA adapter, followed by a persisted, visibly simulated receipt.
