@@ -88,6 +88,7 @@ function validateBoundReview(task: Task, review: Review): void {
 }
 
 export function selectReview(task: Task): Review | null {
+  if (task.preparation) return null;
   const review = task.reviews.find(item => item.decision === null);
   return review && supported(review) ? review : null;
 }

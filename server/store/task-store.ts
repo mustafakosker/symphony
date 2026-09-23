@@ -43,6 +43,7 @@ function clone<T>(value: T): T { return structuredClone(value); }
 export type Store = {
   create(task: Task, operationId: string): Promise<Task>;
   get(taskId: string): Promise<Task>;
+  operation(taskId: string, operationId: string): Promise<StoredEvent | null>;
   list(): Promise<WorkspaceView>;
   apply(taskId: string, expectedRevision: number, operationId: string, event: DomainEvent): Promise<Task>;
   recover(): Promise<Issue[]>;
@@ -208,6 +209,10 @@ class FolderStore implements Store {
 
   async get(taskId: string): Promise<Task> { return clone(this.entry(taskId).task); }
 
+  async operation(taskId: string, operationId: string): Promise<StoredEvent | null> {
+    return clone(this.entry(taskId).operations.get(operationId) ?? null);
+  }
+
   async list(): Promise<WorkspaceView> {
     const unavailable: Issue[] = [...this.entries.entries()].filter(([, entry]) => entry.unavailable)
       .map(([id]) => ({ id: `store-unavailable-${id}`, taskId: id, message: 'Task storage write failed; restart recovery is required' }));
@@ -231,6 +236,9 @@ class FolderStore implements Store {
       catch (error) { throw new BoundaryError(error instanceof TransitionConflict ? 'conflict' : 'invalid',
         error instanceof TransitionConflict ? error.message : 'Invalid task transition', { cause: error }); }
       const stored: StoredEvent = { operationId, payloadDigest, revision: next.revision, at: next.updatedAt, event: clone(event), state: next };
+      if (event.kind === 'preparation') {
+        for (const ref of next.artifacts) await this.verifyArtifact(id, entry.folder, ref);
+      }
       if (event.kind === 'launch') {
         await this.requireRunFile(id, entry.folder, event.run.id, 'input.json');
         for (const ref of event.run.inputRefs) await this.verifyArtifact(id, entry.folder, ref);

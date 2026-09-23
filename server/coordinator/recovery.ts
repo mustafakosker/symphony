@@ -21,6 +21,7 @@ function identityState(run: Run): 'dead' | 'unknown' {
 export async function recoverAttempts(store: Store, _localRoot: string): Promise<Issue[]> {
   const issues = await store.recover();
   for (const task of (await store.list()).tasks) {
+    if (task.preparation) continue;
     const run = task.runs.findLast(item => item.phase === 'running' || item.phase === 'launch-intent');
     if (!run) continue;
     const dead = identityState(run) === 'dead';

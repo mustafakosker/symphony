@@ -1,6 +1,8 @@
 import type { AgentStep, ArtifactRef, Command, DomainEvent, HumanStep, Review, Run, Status, Task } from '../../shared/contracts.js';
 
-export class TransitionConflict extends Error {}
+import { TransitionConflict } from './transition-conflict.js';
+export { TransitionConflict } from './transition-conflict.js';
+import { reducePreparation } from '../preparation/reducer.js';
 
 const triageStep: AgentStep = {
   kind: 'agent', id: '$triage', title: 'Triage idea', role: 'triage',
@@ -61,6 +63,7 @@ function lookupEligibleAgentStep(task: Task): AgentStep | null {
 }
 
 export function eligibleStep(task: Task): AgentStep | null {
+  if (task.preparation) return null;
   if (isTerminal(task.status) || task.intent || task.blockedReason) return null;
   if (task.reviews.some(review => review.decision === null)) return null;
   if (task.status !== 'triaging' && task.status !== 'queued') return null;
@@ -381,6 +384,10 @@ function handleHuman(task: Task, command: Command, now: string): void {
 }
 
 export function reduceTask(task: Task, event: DomainEvent, now: string): Task {
+  if (task.preparation || event.kind === 'preparation') {
+    if (!task.preparation || event.kind !== 'preparation') throw new TransitionConflict('Command does not match task mode');
+    return reducePreparation(task, event, now);
+  }
   if (isTerminal(task.status)) throw new Error('Terminal task is immutable');
   const next = structuredClone(task);
   next.updatedAt = now;
