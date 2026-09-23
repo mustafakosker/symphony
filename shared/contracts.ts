@@ -1,3 +1,4 @@
+import type { JiraPreparation, PreparationEvent, JiraSyncView, TargetOption } from './jira-preparation.js';
 export type Status = 'triaging' | 'queued' | 'running' | 'waiting-for-human'
   | 'blocked' | 'done' | 'rejected' | 'cancelled';
 export type Role = 'triage' | 'researcher' | 'prd-writer' | 'implementer' | 'reviewer';
@@ -37,6 +38,7 @@ export type Run = {
   processExitConfirmed?: boolean;
 };
 export type Task = {
+  preparation?: JiraPreparation;
   schemaVersion: 1; id: string; revision: number; title: string; idea: string;
   type: string; projectId: string | null; source: string; status: Status;
   workflow: Workflow | null; proposedWorkflow: Workflow | null;
@@ -69,6 +71,7 @@ export type Command = {
   requestId: string; taskId: string; expectedRevision: number; action: HumanAction;
 };
 export type DomainEvent =
+  | PreparationEvent
   | { kind: 'human'; command: Command }
   | { kind: 'launch'; run: Run }
   | { kind: 'started'; attemptId: string; pid: number; processStartedAt: string }
@@ -83,4 +86,4 @@ export type StoredEvent = {
   event: DomainEvent | { kind: 'created' }; state: Task;
 };
 export type Issue = { id: string; taskId: string | null; message: string };
-export type WorkspaceView = { tasks: Task[]; issues: Issue[]; coordinator: 'ready' | 'degraded' };
+export type WorkspaceView = { jira?: JiraSyncView & { targets: TargetOption[] }; tasks: Task[]; issues: Issue[]; coordinator: 'ready' | 'degraded' };

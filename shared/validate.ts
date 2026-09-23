@@ -1,3 +1,4 @@
+import { parseJiraPreparation, validatePreparationTask } from './jira-validation.js';
 import type {
   ActionClass, AgentResult, AgentStep, ApprovalBinding, ArtifactRef, Command, HumanAction,
   HumanStep, RepoRef, Review, Role, Run, Status, Task, Workflow,
@@ -17,59 +18,59 @@ const statuses = ['triaging', 'queued', 'running', 'waiting-for-human', 'blocked
 const roles = ['triage', 'researcher', 'prd-writer', 'implementer', 'reviewer'] as const;
 const actions = ['read', 'write-local', 'open-pr', 'merge', 'deploy'] as const;
 
-function object(value: unknown, field: string): ObjectValue {
+export function object(value: unknown, field: string): ObjectValue {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${field} must be an object`);
   return value as ObjectValue;
 }
 
-function string(value: unknown, field: string, nonempty = true): string {
+export function string(value: unknown, field: string, nonempty = true): string {
   if (typeof value !== 'string' || (nonempty && !value.trim())) throw new Error(`${field} must be a ${nonempty ? 'nonempty ' : ''}string`);
   return value;
 }
 
-function nullable<T>(value: unknown, field: string, parse: (v: unknown, f: string) => T): T | null {
+export function nullable<T>(value: unknown, field: string, parse: (v: unknown, f: string) => T): T | null {
   return value === null ? null : parse(value, field);
 }
 
-function integer(value: unknown, field: string, minimum = 0): number {
+export function integer(value: unknown, field: string, minimum = 0): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) throw new Error(`${field} must be a finite integer >= ${minimum}`);
   return value;
 }
 
-function choice<T extends string>(value: unknown, field: string, values: readonly T[]): T {
+export function choice<T extends string>(value: unknown, field: string, values: readonly T[]): T {
   if (typeof value !== 'string' || !values.includes(value as T)) throw new Error(`${field} must be one of ${values.join(', ')}`);
   return value as T;
 }
 
-function array<T>(value: unknown, field: string, parse: (v: unknown, f: string) => T): T[] {
+export function array<T>(value: unknown, field: string, parse: (v: unknown, f: string) => T): T[] {
   if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
   return value.map((item, index) => parse(item, `${field}[${index}]`));
 }
 
-function unique(values: string[], field: string): string[] {
+export function unique(values: string[], field: string): string[] {
   if (new Set(values).size !== values.length) throw new Error(`${field} contains duplicate values`);
   return values;
 }
 
-function fsId(value: unknown, field: string): string {
+export function fsId(value: unknown, field: string): string {
   const id = string(value, field);
   if (!uuid.test(id)) throw new Error(`${field} must be a UUID`);
   return id;
 }
 
-function name(value: unknown, field: string): string {
+export function name(value: unknown, field: string): string {
   const id = string(value, field);
   if (!token.test(id) && id !== '$triage' && !/^\$resolve:[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) throw new Error(`${field} must be a safe identifier`);
   return id;
 }
 
-function timestamp(value: unknown, field: string): string {
+export function timestamp(value: unknown, field: string): string {
   const date = string(value, field);
   if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(date) || !Number.isFinite(Date.parse(date))) throw new Error(`${field} must be a UTC timestamp`);
   return date;
 }
 
-function artifact(value: unknown, field: string): ArtifactRef {
+export function artifact(value: unknown, field: string): ArtifactRef {
   const v = object(value, field);
   const path = string(v.path, `${field}.path`);
   if (path.startsWith('/') || path.startsWith('\\') || path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..') || /^[A-Za-z]:/.test(path)) throw new Error(`${field}.path must be a safe relative path`);
@@ -174,7 +175,7 @@ function run(value: unknown, field: string): Run {
 export function parseTask(value: unknown): Task {
   const v = object(value, 'task');
   if (v.schemaVersion !== 1) throw new Error('task.schemaVersion must be 1');
-  const task: Task = { schemaVersion: 1, id: fsId(v.id, 'task.id'),
+  const task: Task = { ...(v.preparation === undefined ? {} : { preparation: parseJiraPreparation(v.preparation) }), schemaVersion: 1, id: fsId(v.id, 'task.id'),
     revision: integer(v.revision, 'task.revision', 1), title: string(v.title, 'task.title'),
     idea: string(v.idea, 'task.idea'), type: string(v.type, 'task.type'),
     projectId: nullable(v.projectId, 'task.projectId', name), source: string(v.source, 'task.source'),
@@ -196,6 +197,7 @@ export function parseTask(value: unknown): Task {
   unique(task.approvalBindings.map(item => `${item.reviewId}:${item.workflowVersion}`), 'task.approvalBindings');
   unique(task.runs.map(item => item.id), 'task.runs.id');
   if (task.workflow && task.proposedWorkflow && task.proposedWorkflow.version <= task.workflow.version) throw new Error('task.proposedWorkflow.version must exceed approved workflow');
+  if (task.preparation) validatePreparationTask(task);
   return task;
 }
 
