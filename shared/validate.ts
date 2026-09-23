@@ -1,3 +1,4 @@
+import { parseProjectContext } from './project-validation.js';
 import type {
   ActionClass, AgentResult, AgentStep, ApprovalBinding, ArtifactRef, Command, HumanAction,
   HumanStep, RepoRef, Review, Role, Run, Status, Task, Workflow,
@@ -173,8 +174,9 @@ function run(value: unknown, field: string): Run {
 
 export function parseTask(value: unknown): Task {
   const v = object(value, 'task');
-  if (v.schemaVersion !== 1) throw new Error('task.schemaVersion must be 1');
-  const task: Task = { schemaVersion: 1, id: fsId(v.id, 'task.id'),
+  if (v.schemaVersion !== 1 && v.schemaVersion !== 2) throw new Error('task.schemaVersion must be 1 or 2');
+  if (v.schemaVersion === 1 && ('purpose' in v || 'projectContext' in v)) throw new Error('Legacy task cannot contain connected context');
+  let task: Task = { schemaVersion: 1, id: fsId(v.id, 'task.id'),
     revision: integer(v.revision, 'task.revision', 1), title: string(v.title, 'task.title'),
     idea: string(v.idea, 'task.idea'), type: string(v.type, 'task.type'),
     projectId: nullable(v.projectId, 'task.projectId', name), source: string(v.source, 'task.source'),
@@ -192,6 +194,11 @@ export function parseTask(value: unknown): Task {
     blockedReason: nullable(v.blockedReason, 'task.blockedReason', string),
     queuedAt: nullable(v.queuedAt, 'task.queuedAt', timestamp),
     createdAt: timestamp(v.createdAt, 'task.createdAt'), updatedAt: timestamp(v.updatedAt, 'task.updatedAt') };
+  if (v.schemaVersion === 2) {
+    if (v.projectId !== null || !['task', 'project-brief'].includes(String(v.purpose))) throw new Error('Invalid connected task purpose or legacy projectId');
+    const purpose = v.purpose as 'task' | 'project-brief';
+    task = { ...task, schemaVersion: 2, purpose, projectContext: parseProjectContext(v.projectContext, purpose) };
+  }
   unique(task.reviews.map(item => item.id), 'task.reviews.id');
   unique(task.approvalBindings.map(item => `${item.reviewId}:${item.workflowVersion}`), 'task.approvalBindings');
   unique(task.runs.map(item => item.id), 'task.runs.id');

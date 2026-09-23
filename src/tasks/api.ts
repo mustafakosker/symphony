@@ -1,3 +1,4 @@
+import type { ProjectDraft } from "../../shared/projects";
 import type { Command, Task, WorkspaceView } from "../../shared/contracts";
 
 export type WorkspaceApi = {
@@ -5,6 +6,7 @@ export type WorkspaceApi = {
   submit(
     markdown: string,
     requestId: string,
+    projectDraft?:ProjectDraft,
   ): Promise<{ submissionId: string }>;
   command(value: Command): Promise<Task>;
 };
@@ -39,12 +41,12 @@ export const workspaceApi: WorkspaceApi = {
       await fetch("/api/workspace", { signal, cache: "no-store" }),
     );
   },
-  async submit(markdown, requestId) {
+  async submit(markdown, requestId, projectDraft) {
     return read<{ submissionId: string }>(
       await fetch("/api/drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markdown, requestId }),
+        body: JSON.stringify({ markdown, requestId, ...(projectDraft ? {projectDraft} : {}) }),
       }),
     );
   },

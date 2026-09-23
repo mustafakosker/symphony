@@ -26,3 +26,4 @@ it("returns defaults for empty and non-object preferences", () => {
   expect(parsePreferences(JSON.stringify({ selectedId: "", filter: "review", screen: "detail" })))
     .toEqual({ ...defaultState, filter: "review" });
 });
+it('visits global projects and settings without changing the task filter',()=>{const state=parsePreferences(JSON.stringify({screen:'projects',filter:'review',selectedId:'task'}));expect(state.screen).toBe('projects');expect(navigate(state,{type:'screen',screen:'settings'})).toMatchObject({screen:'settings',filter:'review',selectedId:'task'});});

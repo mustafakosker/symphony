@@ -1,0 +1,16 @@
+// @vitest-environment jsdom
+import { expect, it, vi } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import { useProjects } from "./useProjects";
+import type { ProjectApi } from "./api";
+it("loads catalog and settings without persisting project metadata in local storage", async () => {
+  const before = localStorage.length,
+    api = {
+      settings: vi.fn().mockResolvedValue({ state: "unset" }),
+      catalog: vi.fn().mockResolvedValue({ records: [] }),
+      operations: vi.fn().mockResolvedValue([]),
+    } as unknown as ProjectApi;
+  const { result } = renderHook(() => useProjects(api));
+  await waitFor(() => expect(result.current.connected).toBe(true));
+  expect(localStorage.length).toBe(before);
+});

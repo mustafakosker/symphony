@@ -129,3 +129,7 @@ it("blocks a second submission and isolates an earlier failure from a reopened d
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Submit draft" })).toBeEnabled();
 });
+it('keeps title and brief while project settings are open',async()=>{
+ const user=userEvent.setup(),projects={resolve:async()=>({generation:'unset',catalogRevision:'r',revision:'p',targetId:null,referenceIds:[],matches:[],problems:[]}),catalog:async()=>({projects:[],records:[],ineligible:[],scannedAt:''}),settings:async()=>({state:'unset',projectsRoot:null,revision:'r'}),operations:async()=>[],submissions:async()=>[]} as unknown as import('../projects/api').ProjectApi;
+ render(<NewTaskDialog open canSubmit onClose={()=>{}} onSubmit={async()=>{}} projects={projects}/>);await user.type(screen.getByLabelText(/Title hint/),'Investigate checkout');await user.type(screen.getByLabelText('Brief'),'Keep this context');await user.click(screen.getByText('Projects & settings'));await user.click(await screen.findByText('Global settings'));await user.click(screen.getByText('Back to draft'));expect(screen.getByLabelText(/Title hint/)).toHaveValue('Investigate checkout');expect(screen.getByLabelText('Brief')).toHaveValue('Keep this context');
+});

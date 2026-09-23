@@ -1,3 +1,4 @@
+import type { ProjectDraft } from "../../shared/projects";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Command, WorkspaceView } from "../../shared/contracts";
 import { ApiError, workspaceApi, type WorkspaceApi } from "./api";
@@ -11,7 +12,7 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
   connected: boolean;
   error: string | null;
   refresh(): Promise<void>;
-  submit(markdown: string): Promise<void>;
+  submit(markdown: string, projectDraft?:ProjectDraft): Promise<void>;
   act(command: Command): Promise<void>;
   submissionId: string | null;
 } {
@@ -27,6 +28,7 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
   const activeLoad = useRef<AbortController | null>(null);
   const pendingSubmission = useRef<{
     markdown: string;
+    projectDraft?:ProjectDraft;
     requestId: string;
   } | null>(null);
 
@@ -91,7 +93,7 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
   }, [refresh]);
 
   const submit = useCallback(
-    async (markdown: string) => {
+    async (markdown: string, projectDraft?:ProjectDraft) => {
       if (!connected) throw new Error("Coordinator unavailable");
       ++mutationGeneration.current;
       ++latestRequest.current;
@@ -100,12 +102,12 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): {
       mutationInFlight.current = true;
       const pending = pendingSubmission.current;
       const requestId =
-        pending?.markdown === markdown
+        pending?.markdown === markdown && JSON.stringify(pending.projectDraft) === JSON.stringify(projectDraft)
           ? pending.requestId
           : crypto.randomUUID();
-      pendingSubmission.current = { markdown, requestId };
+      pendingSubmission.current = { markdown, requestId, projectDraft };
       try {
-        const receipt = await api.submit(markdown, requestId);
+        const receipt = await (projectDraft ? api.submit(markdown, requestId, projectDraft) : api.submit(markdown, requestId));
         pendingSubmission.current = null;
         if (mounted.current) setSubmissionId(receipt.submissionId);
         if (mounted.current) setError(null);

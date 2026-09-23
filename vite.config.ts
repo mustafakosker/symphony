@@ -10,6 +10,6 @@ export default defineConfig({
   },
   test: {
     setupFiles: ["./src/test/setup.ts"],
-    exclude: [...configDefaults.exclude, ".superpowers/**", ".symphony-local/**", "dist-server/**"],
+    exclude: [...configDefaults.exclude, ".worktrees/**", ".superpowers/**", ".symphony-local/**", "dist-server/**"],
   },
 });

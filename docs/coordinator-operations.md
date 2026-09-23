@@ -123,3 +123,36 @@ Back up the complete synced workspace, `localRoot/tasks/`, and `localRoot/file-r
 Run `npm test -- --run` and `npm run build` for local deterministic checks. `npm run preview:fake` after build provides disposable fake data on a separate loopback port for browser inspection; it bypasses real profile verification only through a test-only application injection and is not a production setting. The opt-in real CLI smoke requires `SYMPHONY_CODEX_SMOKE=1`, `SYMPHONY_CODEX_SMOKE_CONFIG=/absolute/path/to/a/disposable/read-only/config.json` and `SYMPHONY_CODEX_SMOKE_ROLE=<read-only-role>`; then run `npm test -- --run tests/codex.smoke.test.ts`. It creates and removes an isolated local Git fixture, invokes the actual configured CLI twice, and must be treated as blocked if authentication, network, attestation or the host profile is unavailable. It never targets company repositories.
 
 The deterministic suite and fake-browser checks do not establish production readiness. OneDrive sync, company authentication/proxy, actual Codex credentials and permission denial on the deployment host, host-specific process-tree stopping, and mutating workflow effects still require operator verification.
+
+## Project investigation
+
+Configure a dedicated absolute **Projects root folder** in global Settings. Its immediate children must be standalone, non-bare Git repositories with a real `.git` directory. Symlinked children, linked worktrees, alternate object databases, metadata symlinks, and nested repositories are ineligible. Empty repositories stay visible with an explanation. The root must be disjoint from the task store and local runtime. No default is inferred from `~/projects`.
+
+Copies are maintained externally. A rescan discovers local branches and records an observed commit and scan time; it does not establish remote freshness. Symphony issues local read operations against sources and imports objects into owned storage. It never clones, fetches, pulls, pushes, checks out, stages, or commits in the connected root. Dirty, staged, and untracked contents do not enter the snapshots. Source hooks and content filters are not run; symlinks/submodules are inert manifest entries and LFS pointers remain pointers.
+
+Canonical folder names and saved aliases match complete words or phrases, ignoring case. The first `[name]` title prefix selects an optional future change target. Other title/body mentions add references; without a prefix all matches are references. Ambiguous matches require a choice. References can be removed explicitly. Editing the draft invalidates its matching preview. Raw Markdown and filesystem drafts use the same resolver; unresolved drafts appear under Projects → Pending drafts, retaining their original submission identity.
+
+Choose a default local branch and prepare each project. Preparation pins a commit, imports a snapshot, verifies a compatible researcher profile, and schedules its initial brief through the ordinary coordinator's concurrency limit. Internal brief jobs never appear in the public task list or file reviews. Readiness requires host access verification and a saved brief. Human edits create immutable versions. Regeneration after a saved version produces a candidate; it does not overwrite an edited brief. A stale edit retains its text and is rejected until the user reloads/compares. Task creation copies the chosen brief version and pins each chosen branch independently; a brief may describe an older commit, which the task UI labels separately.
+
+All connected steps must request only `read` and a subset of the bound repositories. The future target designation grants no write access. The runner rechecks the exact combined snapshot profile for every launch. Source, snapshot, task-store and internal-job-store write denial, external tool restrictions, and read-scope isolation must be established by host evidence. The separate `snapshotProfiles` manifest entries do not relax legacy `profiles` verification. Updating aliases/briefs does not invalidate policy digests. CLI, role, skill, or host-policy changes do.
+
+Snapshots live under `<localRoot>/projects/snapshots/<repository-id>/<snapshot-id>`; objects, catalogs, operations, binding journals, and briefs also live under `localRoot/projects`. Root changes create a new catalog generation; existing task copies and snapshot citations remain usable. No automatic pruning deletes historical evidence. Removing a source after its snapshot is imported does not affect that snapshot. A partially bound submission retains its pinned commits and fails explicitly if required objects disappear; it never silently uses a newer tip.
+
+Per-repository configurable defaults are 100,000 entries, 1 GiB total bytes, 64 MiB per file, and 120 seconds per Git command (`projectSnapshotMaxEntries`, `projectSnapshotMaxBytes`, `projectSnapshotMaxFileBytes`, `projectGitTimeoutMs`). Complete task context is capped at 100,000 entries / 1 GiB across snapshots and 1 MiB copied metadata. Brief text is capped at 128 KiB. Reports permit at most 256 citations; source previews are bounded to 256 KiB and 1,000 cited lines. Exceeding a limit fails explicitly.
+
+Operation and submission receipts survive restart. Preparation retries use a new request ID; accepted submissions retain their original binding. Failures are scoped to affected projects. Missing roots do not prevent historical tasks or the UI from opening. During shutdown the shared coordinator stops its processes before project background work and the host lock are closed. Connected-task portability across machines and automatic history cleanup are outside this release.
+
+### Host verification
+
+Use a disposable host configuration and repository fixtures, never company sources:
+
+```sh
+npm run build
+node scripts/verify-project-access.mjs --config /absolute/disposable-host.json --output /absolute/new-probe-evidence.json
+```
+
+The script creates disposable source repositories and owned snapshots, probes the real configured CLI, and passes exact single and combined scopes through the production profile verifier. It refuses an evidence path inside the connected source root or an existing output file, and does not install or rewrite an attestation. A missing compatible profile returns failure with explicit limitations; unattempted writes are never recorded as denied. Evidence files use mode 0600.
+
+**Real-host acceptance remains required.** The bundled diagnostic cannot provision a host's scope isolation or external-tool verifier. No provider for attempted write-denial / combined read-scope checks is bundled. Even a successful read-only CLI read is insufficient to mark the complete host probe passed. A host operator must supply genuine single/combined scope evidence, attempted write denials, an OS-enforced read-only root fixture, valid returned citations, and external-tool checks before installing a snapshot profile. Fake-preview and unit-test evidence must never be installed as a real attestation.
+
+`npm run preview:fake` uses disposable repositories and explicitly injected fake runners/verifiers. It demonstrates Settings, discovery, preparation, briefs, task matching and citations without claiming real sandbox enforcement.

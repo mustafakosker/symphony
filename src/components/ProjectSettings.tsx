@@ -1,0 +1,129 @@
+import { useEffect, useState } from "react";
+import type { RootSetting } from "../../shared/projects";
+import type { ProjectApi } from "../projects/api";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+export default function ProjectSettings({ api }: { api: ProjectApi }) {
+  const [saved, setSaved] = useState<RootSetting | null>(null),
+    [path, setPath] = useState(""),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [message, setMessage] = useState("");
+  useEffect(() => {
+    const c = new AbortController();
+    api
+      .settings(c.signal)
+      .then((s) => {
+        if (!c.signal.aborted) {
+          setSaved(s);
+          setPath(s.projectsRoot ?? "");
+        }
+      })
+      .catch((e) => {
+        if (!c.signal.aborted) setError(String(e));
+      });
+    return () => c.abort();
+  }, [api]);
+  async function save(clear = false) {
+    if (!saved || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await api.saveSettings({
+        projectsRoot: clear ? null : path.trim() || null,
+        expectedRevision: saved.revision,
+        requestId: crypto.randomUUID(),
+      });
+      setSaved(next);
+      setPath(next.projectsRoot ?? "");
+      setMessage("Projects root saved. Discovery will refresh shortly.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="project-page">
+      <span className="eyebrow">GLOBAL SETTINGS</span>
+      <h1>Projects root</h1>
+      <p>
+        Choose a dedicated folder of externally maintained repository copies.
+        Symphony reads committed source for investigation, design, and
+        implementation plans.
+      </p>
+      <div className="project-panel">
+        <Label htmlFor="projects-root">Projects root folder</Label>
+        <Input
+          id="projects-root"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          placeholder="/path/to/investigation-projects"
+          disabled={!saved || busy}
+        />
+        <p className="project-muted">
+          Each direct child Git repository becomes a project. Copies are
+          read-only; keep them current outside Symphony.
+        </p>
+        <div className="project-actions">
+          <Button disabled={!saved || busy} onClick={() => void save()}>
+            Save projects root
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!saved || busy || !saved.projectsRoot}
+            onClick={() => void save(true)}
+          >
+            Clear root
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!saved || busy || saved.state !== "ready"}
+            onClick={() => {
+              setBusy(true);
+              api
+                .rescan(crypto.randomUUID())
+                .then(() => setMessage("Scan queued"))
+                .catch((e) => setError(String(e)))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Rescan projects
+          </Button>
+        </div>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            api
+              .settings()
+              .then(setSaved)
+              .catch((e) => setError(String(e)))
+              .finally(() => setBusy(false));
+          }}
+        >
+          Reload saved settings
+        </Button>
+        {saved && (
+          <dl>
+            <dt>Saved folder</dt>
+            <dd>{saved.projectsRoot ?? "Not configured"}</dd>
+            <dt>Status</dt>
+            <dd>
+              {saved.state}
+              {saved.message ? ` — ${saved.message}` : ""}
+            </dd>
+          </dl>
+        )}
+        {message && <p role="status">{message}</p>}
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}

@@ -290,11 +290,13 @@ class FolderStore implements Store {
   }
 
   async readArtifact(id: string, ref: ArtifactRef): Promise<Uint8Array> {
-    const entry = this.entry(id);
-    await this.verifyArtifact(id, entry.folder, ref);
-    const bytes = await readFile(await this.taskPath(id, entry.folder, ref.path));
-    if (byteDigest(bytes) !== ref.digest) throw new BoundaryError('conflict', 'Referenced artifact changed during read');
-    return bytes;
+    return this.serial(id, async () => {
+      const entry = this.entry(id);
+      await this.verifyArtifact(id, entry.folder, ref);
+      const bytes = await readFile(await this.taskPath(id, entry.folder, ref.path));
+      if (byteDigest(bytes) !== ref.digest) throw new BoundaryError('conflict', 'Referenced artifact changed during read');
+      return bytes;
+    });
   }
 
   async readRunLog(id: string, runId: string, offset: number, maxBytes: number, stream: 'stdout' | 'stderr' = 'stdout'): Promise<{ text: string; nextOffset: number; complete: boolean }> {

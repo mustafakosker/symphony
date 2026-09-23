@@ -5,16 +5,73 @@
       "profile": "example-read-only",
       "cliVersion": "EDIT-ME-installed-version-without-codex-cli-prefix",
       "sandbox": "read-only",
-      "actions": ["read"],
+      "actions": [
+        "read"
+      ],
       "environmentKeys": [],
       "repositories": [],
       "coveredFiles": [
-        { "path": "/EDIT-ME/codex-home/config.toml", "sha256": "EDIT-ME-64-lowercase-hex" },
-        { "path": "/EDIT-ME/codex-home/example-read-only.config.toml", "sha256": "EDIT-ME-64-lowercase-hex" },
-        { "path": "/EDIT-ME/example-synced-workspace/roles/roles.json", "sha256": "EDIT-ME-64-lowercase-hex" },
-        { "path": "/EDIT-ME/example-synced-workspace/projects/projects.json", "sha256": "EDIT-ME-64-lowercase-hex" }
+        {
+          "path": "/EDIT-ME/codex-home/config.toml",
+          "sha256": "EDIT-ME-64-lowercase-hex"
+        },
+        {
+          "path": "/EDIT-ME/codex-home/example-read-only.config.toml",
+          "sha256": "EDIT-ME-64-lowercase-hex"
+        },
+        {
+          "path": "/EDIT-ME/example-synced-workspace/roles/roles.json",
+          "sha256": "EDIT-ME-64-lowercase-hex"
+        },
+        {
+          "path": "/EDIT-ME/example-synced-workspace/projects/projects.json",
+          "sha256": "EDIT-ME-64-lowercase-hex"
+        }
       ],
-      "checks": ["task-store-write-denied", "repository-write-denied", "merge-deploy-tool-denied"]
+      "checks": [
+        "task-store-write-denied",
+        "repository-write-denied",
+        "merge-deploy-tool-denied"
+      ]
+    }
+  ],
+  "snapshotProfiles": [
+    {
+      "version": 1,
+      "role": "researcher",
+      "profile": "researcher",
+      "executionProfile": "verified-researcher-snapshot-scope",
+      "cliVersion": "REPLACE_WITH_VERIFIED_CLI_VERSION",
+      "sandbox": "read-only",
+      "actions": [
+        "read"
+      ],
+      "environmentKeys": [],
+      "snapshotRoots": [
+        {
+          "repository": "discovered-REPLACE_WITH_CATALOG_ID",
+          "root": "/absolute/local-runtime/projects/snapshots/discovered-REPLACE_WITH_CATALOG_ID"
+        }
+      ],
+      "coveredFiles": [
+        {
+          "path": "/absolute/host/policy-or-skill-file",
+          "sha256": "REPLACE_WITH_ACTUAL_SHA256"
+        }
+      ],
+      "evidence": {
+        "provider": "REPLACE_WITH_REAL_HOST_VERIFIER",
+        "readMechanism": "REPLACE_WITH_VERIFIED_SCOPE_MECHANISM",
+        "verifiedAt": "REPLACE_WITH_REAL_VERIFICATION_TIME",
+        "checks": [
+          "source-write-denied",
+          "snapshot-write-denied",
+          "task-store-write-denied",
+          "job-store-write-denied",
+          "snapshot-scope-verified",
+          "merge-deploy-tool-denied"
+        ]
+      }
     }
   ]
 }

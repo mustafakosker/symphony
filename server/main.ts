@@ -1,3 +1,4 @@
+import { openProjectServices,type ProjectServices } from './projects/service.js';
 import { createServer, type Server } from 'node:http';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,7 @@ import { acquireHostLock } from './store/lock.js';
 import { openStore } from './store/task-store.js';
 
 type TestOnlyInjection = { runner?: Runner;
+  verifyProjectAccess?: (project: import('../shared/projects.js').ProjectRecord, snapshot: import('../shared/projects.js').SnapshotRef) => Promise<void>;
   verifyCapabilities?: (settings: Settings, roles: RoleConfig[], version: string) => Promise<void> };
 type Options = { configPath?: string; buildDir?: string } & TestOnlyInjection;
 export type Application = { address: string; close(): Promise<void> };
@@ -28,6 +30,7 @@ export async function startApplication(options: Options = {}): Promise<Applicati
   const configPath = options.configPath ?? defaultConfigPath();
   let releaseLock: (() => Promise<void>) | null = null;
   let server: Server | null = null;
+  let projects: ProjectServices | null = null;
   let coordinator: ReturnType<typeof createCoordinator> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let ticking: Promise<void> | null = null;
@@ -38,16 +41,19 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     releaseLock = await acquireHostLock(settings.localRoot);
     const registry = await loadRegistry(settings.workspaceRoot);
     const store = await openStore(settings.workspaceRoot);
-    const startupIssues = await recoverAttempts(store, settings.localRoot);
+    projects = await openProjectServices(configPath, settings, store, {registry,verifyAccess:options.verifyProjectAccess});
+    const startupIssues = await recoverAttempts(projects.schedulerStore, settings.localRoot);
     if (startupIssues.some(issue => issue.message.includes('could not be persisted'))) throw new Error('Startup recovery could not persist an uncertain run');
     const runner = options.runner ?? createCodexRunner(settings);
     const { version } = await runner.probe();
     await (options.verifyCapabilities ?? verifyConfiguredProfiles)(settings, registry.roles, version);
+    projects.setRuntimeVersion(version);
+    const activeProjects=projects;
     const intake = createIntake(settings.workspaceRoot, store, settings.stableMs, {},
-      { phoneDraftsEnabled: settings.phoneDraftsEnabled });
+      { phoneDraftsEnabled: settings.phoneDraftsEnabled, projectGate: projects.draftGate });
     let fileReviews: FileReviewAdapter | undefined;
-    coordinator = createCoordinator({ store, intake, registry, runner, settings, recovered: true,
-      beforeDispatch: async now => { await fileReviews?.scan(now.getTime()); } });
+    coordinator = createCoordinator({ store:projects.schedulerStore, intake, registry, runner, settings, recovered: true,
+      beforeDispatch: async now => { await activeProjects.tick(); await fileReviews?.scan(now.getTime()); } });
     const activeCoordinator = coordinator;
     if (settings.fileReviewsEnabled) {
       fileReviews = createFileReviews({ store, workspaceRoot: settings.workspaceRoot,
@@ -55,9 +61,9 @@ export async function startApplication(options: Options = {}): Promise<Applicati
         apply: command => applyHumanCommand(store, activeCoordinator, command) });
     }
     const ui = createStaticHandler(options.buildDir ?? defaultBuildDir);
-    const api = createApi({ store, intake, coordinator, allowedOrigin: settings.allowedOrigin,
+    const api = createApi({ store, intake, coordinator, projects, allowedOrigin: settings.allowedOrigin,
       runtimeVersion: () => version, health: () => degraded ? 'degraded' : 'ready',
-      issues: async () => [...startupIssues, ...(await fileReviews?.issues() ?? [])] });
+      issues: async () => [...startupIssues, ...activeProjects.issues(), ...(await fileReviews?.issues() ?? [])] });
     server = createServer((request, response) => {
       if ((request.url ?? '').startsWith('/api/')) api(request, response);
       else ui(request, response);
@@ -106,7 +112,7 @@ export async function startApplication(options: Options = {}): Promise<Applicati
         }
         finally {
           await new Promise<void>(resolveClose => ownedServer.close(() => resolveClose()));
-          if (clean) await ownedLock();
+          if (clean) { await activeProjects.close(); await ownedLock(); }
         }
       } };
   } catch (error) {
@@ -115,7 +121,7 @@ export async function startApplication(options: Options = {}): Promise<Applicati
     let clean = true;
     await coordinator?.shutdown().catch(cause => { clean = false; console.error('[startup] Coordinator shutdown failed:', cause); });
     if (server?.listening) await new Promise<void>(resolveClose => server!.close(() => resolveClose()));
-    if (clean) await releaseLock?.();
+    if (clean) { await projects?.close(); await releaseLock?.(); }
     throw new Error(`Symphony startup failed with ${configPath}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }

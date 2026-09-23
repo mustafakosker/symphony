@@ -8,6 +8,8 @@ import {
 import { Button } from "./ui/button";
 
 type Props = {
+  screen?: string;
+  onScreen?(screen: "projects" | "settings"): void;
   tasks: Task[];
   filter: Filter;
   connected: boolean;
@@ -23,7 +25,7 @@ const views = [
   { filter: "closed", label: "Closed", Icon: Archive },
 ] as const;
 
-export default function WorkspaceSidebar({ tasks, filter, connected, coordinator, onFilter, onSearch }: Props) {
+export default function WorkspaceSidebar({ screen,onScreen,tasks, filter, connected, coordinator, onFilter, onSearch }: Props) {
   const { setOpenMobile } = useSidebar();
   const counts: Record<Filter, number> = {
     all: tasks.length,
@@ -45,11 +47,12 @@ export default function WorkspaceSidebar({ tasks, filter, connected, coordinator
         <nav aria-label="Workspace">
           <SidebarMenu>
             {views.map(({ filter: view, label, Icon }) => <SidebarMenuItem key={view}>
-              <SidebarMenuButton isActive={filter === view} aria-current={filter === view ? "page" : undefined}
+              <SidebarMenuButton isActive={filter === view && !["projects","settings"].includes(screen??"")} aria-current={filter === view && !["projects","settings"].includes(screen??"") ? "page" : undefined}
                 onClick={() => { onFilter(view); setOpenMobile(false); }}>
                 <Icon aria-hidden="true" size={16} /> <span>{label}</span><span className="workspace-sidebar-count">{counts[view]}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>)}
+          {onScreen && (["projects","settings"] as const).map(destination=><SidebarMenuItem key={destination}><SidebarMenuButton isActive={screen===destination} aria-current={screen===destination?"page":undefined} onClick={()=>{onScreen(destination);setOpenMobile(false);}}>{destination==="projects"?"Projects":"Settings"}</SidebarMenuButton></SidebarMenuItem>)}
           </SidebarMenu>
         </nav>
       </SidebarGroup>

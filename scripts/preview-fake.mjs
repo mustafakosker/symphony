@@ -1,12 +1,17 @@
 // Disposable, fake-only browser preview. Never imported by the production entry point.
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { readFile } from 'node:fs/promises';
+import { loadSettings } from '../dist-server/server/config/settings.js';
+import { openProjectServices } from '../dist-server/server/projects/service.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { openStore } from '../dist-server/server/store/task-store.js';
 import { startApplication } from '../dist-server/server/main.js';
 
-const root = await mkdtemp(join(tmpdir(), 'symphony-fake-preview-'));
+const root = await realpath(await mkdtemp(join(tmpdir(), 'symphony-fake-preview-')));
 const workspaceRoot = join(root, 'workspace');
 const localRoot = join(root, 'local');
 await Promise.all([mkdir(join(workspaceRoot, 'projects'), { recursive: true }), mkdir(join(workspaceRoot, 'roles'), { recursive: true }), mkdir(localRoot)]);
@@ -18,9 +23,17 @@ await writeFile(join(workspaceRoot, 'roles/roles.json'), JSON.stringify({ roles:
 const port = Number(process.env.SYMPHONY_PREVIEW_PORT ?? 4321);
 const emptyPreview = process.env.SYMPHONY_PREVIEW_EMPTY === '1';
 const configPath = join(root, 'config.json');
+const projectsRoot=join(root,'investigation-projects');await mkdir(projectsRoot);
+for(const name of ['shop','payments']){const repo=join(projectsRoot,name);await mkdir(repo);const git=async args=>promisify(execFile)('git',['-c','user.name=Preview','-c','user.email=preview@example.invalid',...args],{cwd:repo});await git(['init','-q','-b','main']);await writeFile(join(repo,'README.md'),`# ${name}\n\nCommitted FAKE architecture. Test commands Not run.\n`);await git(['add','README.md']);await git(['commit','-qm','Disposable preview']);}
+await mkdir(join(projectsRoot,'not-a-repository'));
+
 await writeFile(configPath, JSON.stringify({ workspaceRoot, localRoot, codexBinary: process.execPath,
-  port, allowedOrigin: `http://127.0.0.1:${port}`, scanMs: 100, stableMs: 100, stopGraceMs: 200 }));
+  projectsRoot, concurrency:3, port, allowedOrigin: `http://127.0.0.1:${port}`, scanMs: 100, stableMs: 100, stopGraceMs: 200 }));
 const store = await openStore(workspaceRoot);
+const projectServices=await openProjectServices(configPath,await loadSettings(configPath),store,{verifyAccess:async()=>{}});
+await projectServices.rescan('preview-scan');await projectServices.tick();await projectServices.close();
+for(const p of (await projectServices.catalog.read()).records)await projectServices.prepare(p.id,'main',`prepare-${p.id}`);
+await projectServices.close();
 const workflow = { version: 1, steps: [
   { kind: 'agent', id: 'research', title: 'Research', role: 'researcher', instructions: 'FAKE research',
     inputs: [], repositories: [], actions: ['read'], outputs: ['findings'], checks: ['findings'] },
@@ -106,6 +119,12 @@ longContentTask.reviews = [{ id: 'long-question', kind: 'question', workflowVers
 if (!emptyPreview) await store.create(longContentTask, 'seed-long-content');
 const runner = { async probe() { return { version: 'fake-preview-only' }; },
   async start(assignment) {
+    if(assignment.task.schemaVersion===2){
+      let result;
+      if(assignment.step.id==='$triage'){const connectedWorkflow=structuredClone(workflow);connectedWorkflow.steps[0].repositories=assignment.step.repositories;result={kind:'propose_workflow_change',taskId:assignment.task.id,attemptId:assignment.run.id,summary:'Fake read-only plan',artifacts:[],workflow:connectedWorkflow,reason:'Fake triage',title:assignment.task.title,taskType:'feature',projectId:null};}
+      else {const citations=[];for(const [i,access] of assignment.snapshotAccess.entries()){const manifest=JSON.parse(await readFile(join(access.snapshotPath,'../manifest.json'),'utf8')),entry=manifest.entries.find(e=>e.path==='README.md');citations.push({id:`source-${i}`,repositoryId:access.repository,commit:access.snapshot.commit,path:entry.path,objectId:entry.objectId,contentDigest:entry.contentDigest,startLine:1,endLine:3});}const report={format:'source-report-v1',text:citations.map(c=>`FAKE architecture and conventions [cite:${c.id}].\nValidation commands: Not run.`).join('\n\n'),citations};result={kind:'completed',taskId:assignment.task.id,attemptId:assignment.run.id,summary:'Fake investigation complete',artifacts:[],evidence:{[assignment.step.outputs[0]]:JSON.stringify(report)}};}
+      return {pid:process.pid,processStartedAt:new Date().toISOString(),completion:Promise.resolve({code:0,signal:null,error:null,result}),stop:async()=>{}};
+    }
     let finish;
     let timer;
     const completion = new Promise(done => { finish = done; });
@@ -125,7 +144,7 @@ const runner = { async probe() { return { version: 'fake-preview-only' }; },
       async stop() { clearTimeout(timer); finish({ code: null, signal: 'SIGTERM', error: 'Fake stop', result: null }); } };
   } };
 const app = await startApplication({ configPath, buildDir: resolve('dist'), runner,
-  verifyCapabilities: async () => {} });
+  verifyCapabilities: async () => {}, verifyProjectAccess:async()=>{} });
 console.log(`FAKE PREVIEW ${app.address} (temporary root ${root})`);
 const close = async () => { await app.close(); await rm(root, { recursive: true, force: true }); };
 process.once('SIGINT', () => { void close().then(() => process.exit(0)); });

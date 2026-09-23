@@ -146,3 +146,35 @@ it('bounds app close while process start is pending and fences a late handle', a
   expect(abandoned).toBe(1);
   expect((await (await openStore(settings.workspaceRoot)).get(task.id)).runs[0].result).toBeNull();
 });
+
+it('holds phone submissions for project resolution before advancing the phone template', async () => {
+  const fixture = await setup();
+  const config = JSON.parse(await readFile(fixture.configPath, 'utf8'));
+  const projectsRoot = join(fixture.root, 'sources');
+  await mkdir(projectsRoot);
+  await writeFile(fixture.configPath, JSON.stringify({ ...config, phoneDraftsEnabled: true, projectsRoot }));
+  const app = await startApplication({ configPath: fixture.configPath, buildDir: fixture.buildDir,
+    runner: fixture.runner, verifyCapabilities: async () => {} });
+  const draft = join(config.workspaceRoot, 'drafts/phone/New idea-001.md');
+  try {
+    await expect.poll(async () => readFile(draft, 'utf8')).toBe('');
+    await writeFile(draft, '# [missing-project] Investigate\n\nPhone context');
+    await rename(draft, draft.replace('.md', '.ready.md'));
+    const pending = async () => (await fetch(`${app.address}/api/project-submissions`)).json();
+    await expect.poll(async () => (await pending()).length, { timeout: 3000 }).toBe(1);
+    const [submission] = await pending();
+    expect(submission.preview.problems[0].code).toBe('unknown-target');
+    expect((await (await fetch(`${app.address}/api/workspace`)).json()).tasks).toEqual([]);
+    await expect(readFile(join(config.workspaceRoot, 'drafts/phone/New idea-002.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const post = (path: string, value: unknown) => fetch(app.address + path, { method: 'POST',
+      headers: { Origin: app.address, 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+    const text = { title: 'Investigate', description: 'Phone context' }, choices = { excludedReferenceIds: [], ambiguities: {} };
+    const preview = await (await post('/api/projects/resolve', { text, choices })).json();
+    const response = await post(`/api/project-submissions/${submission.submissionId}/resolve`, {
+      expectedRevision: submission.revision, requestId: 'resolve-phone', projectDraft: {
+        text, choices, previewRevision: preview.revision, catalogRevision: preview.catalogRevision, selections: [] } });
+    expect(response.status).toBe(202);
+    await expect.poll(async () => (await (await fetch(`${app.address}/api/workspace`)).json()).tasks.length).toBe(1);
+    await expect.poll(async () => readFile(join(config.workspaceRoot, 'drafts/phone/New idea-002.md'), 'utf8')).toBe('');
+  } finally { await app.close(); }
+});

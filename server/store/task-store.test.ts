@@ -310,3 +310,14 @@ describe('durable task store', () => {
     } finally { await rm(outside, { recursive: true, force: true }); }
   });
 });
+
+it('replays connected context without consulting a mutable project catalog', async () => {
+  const { projectContextFixture } = await import('../testing/projects.js');
+  const store = await openStore(root);
+  const task = { ...draftTask(), schemaVersion: 2 as const, purpose: 'task' as const, projectContext: projectContextFixture() };
+  await store.create(task, 'connected-create');
+  expect(await (await openStore(root)).get(task.id)).toEqual(task);
+  const changed = await store.apply(task.id, 1, 'cancel-connected', { kind: 'human', command: {
+    taskId: task.id, requestId: 'cancel-connected', expectedRevision: 1, action: { kind: 'cancel' } } });
+  expect((await (await openStore(root)).get(task.id))).toEqual(changed);
+});

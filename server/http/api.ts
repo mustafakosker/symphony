@@ -1,3 +1,5 @@
+import { handleProjectRequest,parseProjectDraft } from './projects.js';
+import type { ProjectServices } from '../projects/service.js';
 import { randomUUID } from 'node:crypto';
 import type { RequestListener, ServerResponse } from 'node:http';
 import { BoundaryError, parseCommand } from '../../shared/validate.js';
@@ -7,7 +9,7 @@ import type { Intake } from '../intake/intake.js';
 import type { Coordinator } from '../coordinator/coordinator.js';
 import { checkAccess, HttpError, readJson } from './access.js';
 
-type Deps = { store: Store; intake: Intake; coordinator: Coordinator; allowedOrigin: string;
+type Deps = { projects?: ProjectServices; store: Store; intake: Intake; coordinator: Coordinator; allowedOrigin: string;
   runtimeVersion?: () => string; health?: () => 'ready' | 'degraded';
   issues?: () => Promise<import('../../shared/contracts.js').Issue[]> };
 const token = '[A-Za-z0-9][A-Za-z0-9._-]*';
@@ -42,6 +44,7 @@ export function createApi(deps: Deps): RequestListener {
       const path = url.pathname;
       const mutation = method === 'POST';
       checkAccess(request, deps.allowedOrigin, mutation);
+      if(deps.projects && await handleProjectRequest(request,response,url,deps.projects)) return;
       if (method === 'GET' && path === '/api/workspace') {
         const view = await deps.store.list();
         const [intakeIssues, startupIssues] = await Promise.all([deps.intake.issues(), deps.issues?.() ?? []]);
@@ -61,7 +64,7 @@ export function createApi(deps: Deps): RequestListener {
         const value = object(await readJson(request));
         if (typeof value.requestId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value.requestId) ||
           typeof value.markdown !== 'string') throw new BoundaryError('invalid', 'Invalid draft request');
-        send(response, 202, await deps.intake.submit(value.markdown, value.requestId)); return;
+        send(response, 202, await deps.intake.submit(value.markdown, value.requestId, value.projectDraft === undefined ? undefined : parseProjectDraft(value.projectDraft))); return;
       }
       const commandMatch = path.match(commandRoute);
       if (method === 'POST' && commandMatch) {

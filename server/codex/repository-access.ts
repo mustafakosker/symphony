@@ -1,3 +1,6 @@
+import { openSnapshots } from '../projects/snapshots.js';
+import { resolveSnapshotAccess } from './snapshot-access.js';
+import { assertProjectRun } from '../domain/project-policy.js';
 import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import type { Assignment } from './adapter.js';
@@ -8,6 +11,15 @@ export type RepositoryAccess = {
 };
 
 export async function validateRepositoryAccess(assignment: Assignment, localRoot: string): Promise<void> {
+  if (assignment.task.schemaVersion === 2) {
+    if (assignment.repositoryAccess?.length) throw new Error('Mixed legacy and snapshot access');
+    assertProjectRun(assignment.task, assignment.step, assignment.run);
+    const snapshots = await openSnapshots(localRoot, { entries: 1000000, totalBytes: Number.MAX_SAFE_INTEGER, fileBytes: Number.MAX_SAFE_INTEGER, timeoutMs: 120000 });
+    const expected = await resolveSnapshotAccess(assignment.task.projectContext, assignment.step.repositories, snapshots);
+    if (JSON.stringify(expected) !== JSON.stringify(assignment.snapshotAccess ?? [])) throw new Error('Invalid snapshot access mapping');
+    return;
+  }
+  if (assignment.snapshotAccess?.length) throw new Error('Legacy assignment cannot grant snapshot access');
   const access = assignment.repositoryAccess ?? [];
   const selected = assignment.step.repositories;
   const invalid = () => new Error('Invalid selected repository access mapping');

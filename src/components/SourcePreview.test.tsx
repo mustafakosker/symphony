@@ -1,0 +1,3 @@
+// @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest';import { expect,it } from 'vitest';import { render,screen } from '@testing-library/react';import SourcePreview from './SourcePreview';
+it('renders literal source and highlights only the cited range',()=>{render(<SourcePreview source={{repositoryId:'repo',commit:'abc',path:'src/a.ts',firstLine:4,startLine:5,endLine:5,lines:['context','<script>unsafe</script>','after']}} onClose={()=>{}}/>);expect(screen.getByLabelText('Cited source').querySelectorAll('[data-highlighted="true"]')).toHaveLength(1);expect(document.querySelector('script')).toBeNull();expect(screen.getByRole('dialog')).toHaveTextContent('src/a.ts');});

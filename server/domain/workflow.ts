@@ -1,3 +1,4 @@
+import { assertProjectWorkflow, assertProjectRun } from './project-policy.js';
 import type { AgentStep, ArtifactRef, Command, DomainEvent, HumanStep, Review, Run, Status, Task } from '../../shared/contracts.js';
 
 export class TransitionConflict extends Error {}
@@ -53,7 +54,7 @@ export function hasCurrentApproval(task: Task, stepId: string): boolean {
 }
 
 function lookupEligibleAgentStep(task: Task): AgentStep | null {
-  if (task.currentStepId === '$triage') return structuredClone(triageStep);
+  if (task.currentStepId === '$triage') return { ...structuredClone(triageStep), repositories: task.schemaVersion === 2 ? task.projectContext.projects.map(p => p.repositoryId) : [] };
   const step = task.workflow?.steps.find(item => item.id === task.currentStepId);
   if (!step || step.kind !== 'agent') return null;
   if (task.completedStepIds.includes(step.id)) return null;
@@ -335,6 +336,7 @@ function handleHuman(task: Task, command: Command, now: string): void {
     review.decision = 'approve';
     if (review.kind === 'workflow') {
       if (!task.proposedWorkflow) throw new Error('Proposed workflow missing');
+      assertProjectWorkflow(task, task.proposedWorkflow);
       const former = task.workflow;
       const approved = task.proposedWorkflow;
       let unchangedPrefix = 0;
@@ -389,6 +391,7 @@ export function reduceTask(task: Task, event: DomainEvent, now: string): Task {
     case 'launch': {
       const step = eligibleStep(next);
       if (!step || (step.id !== event.run.stepId && event.run.stepId !== `$resolve:${step.id}`)) throw new Error('Run step is not eligible');
+      assertProjectRun(next, step, event.run);
       if (event.run.stepId.startsWith('$resolve:') && (step.actions.some(action => action !== 'read') && !step.repositories.length))
         throw new Error('Invalid repository resolution assignment');
       if (next.runs.some(run => run.phase === 'running' || run.phase === 'launch-intent')) throw new Error('Task already has an active attempt');
@@ -438,6 +441,8 @@ export function reduceTask(task: Task, event: DomainEvent, now: string): Task {
           artifacts: result.artifacts, ...(event.bindQuestionAttempt ? { attemptId: run.id } : {}), prompt: result.question, answer: null, decision: null });
         setStatus(next, 'waiting-for-human', now);
       } else if (result.kind === 'propose_workflow_change') {
+        assertProjectWorkflow(next, result.workflow);
+        if (next.schemaVersion === 2 && (result.projectId !== null || next.purpose === 'project-brief')) throw new Error('Connected project binding is immutable');
         if (result.workflow.version <= (next.workflow?.version ?? 0)) throw new Error('Proposed workflow version must increase');
         next.proposedWorkflow = structuredClone(result.workflow);
         next.title = result.title; next.type = result.taskType; next.projectId = result.projectId;

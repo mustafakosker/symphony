@@ -1,0 +1,163 @@
+import { useEffect, useMemo, useState } from "react";
+import { deriveDraftText } from "../../shared/project-resolution";
+import type { ProjectDraft } from "../../shared/projects";
+import type { ProjectApi, ProjectSubmission } from "../projects/api";
+import ProjectSelection from "./ProjectSelection";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Label } from "./ui/label";
+export default function ProjectSubmissions({
+  api,
+  onOpenSettings,
+}: {
+  api: ProjectApi;
+  onOpenSettings(): void;
+}) {
+  const [items, setItems] = useState<ProjectSubmission[]>([]),
+    [error, setError] = useState("");
+  useEffect(() => {
+    if (!api.submissions) return;
+    const c = new AbortController();
+    api
+      .submissions(c.signal)
+      .then((v) => {
+        if (!c.signal.aborted) setItems(v);
+      })
+      .catch((e) => {
+        if (!c.signal.aborted) setError(String(e));
+      });
+    return () => c.abort();
+  }, [api]);
+  return (
+    <>
+      {error && <p role="alert">{error}</p>}
+      {items.length > 0 && (
+        <section aria-label="Pending drafts" className="project-panel">
+          <h2>Pending drafts</h2>
+          <p>
+            Resolve project names and preparation before investigation begins.
+          </p>
+          {items.map((item) => (
+            <Pending
+              key={item.submissionId}
+              item={item}
+              api={api}
+              onOpenSettings={onOpenSettings}
+              onResolved={() =>
+                setItems((v) =>
+                  v.filter((i) => i.submissionId !== item.submissionId),
+                )
+              }
+            />
+          ))}
+        </section>
+      )}
+    </>
+  );
+}
+function Pending({
+  item,
+  api,
+  onOpenSettings,
+  onResolved,
+}: {
+  item: ProjectSubmission;
+  api: ProjectApi;
+  onOpenSettings(): void;
+  onResolved(): void;
+}) {
+  const initial = deriveDraftText(item.markdown, item.filename),
+    [title, setTitle] = useState(initial.title),
+    [description, setDescription] = useState(initial.description.trim()),
+    [draft, setDraft] = useState<ProjectDraft | null>(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [key, setKey] = useState(0);
+  const text = useMemo(
+    () => ({ title: title.trim(), description: description.trim() }),
+    [title, description],
+  );
+  return (
+    <details>
+      <summary>
+        {item.filename} — {item.message}
+      </summary>
+      {item.operationId ? (
+        <>
+          <p>
+            {item.operation?.message ??
+              "Preparing pinned project context. The coordinator will resume this draft automatically."}
+          </p>
+          {item.operation?.state === "failed" && (
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                api
+                  .retryOperation(item.operationId!, crypto.randomUUID())
+                  .then(onResolved)
+                  .catch((e) => setError(String(e)))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Retry pinned submission
+            </Button>
+          )}
+          {error && <p role="alert">{error}</p>}
+        </>
+      ) : (
+        <>
+          <Label htmlFor={`pending-${item.submissionId}`}>Pending title</Label>
+          <Input
+            id={`pending-${item.submissionId}`}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <Label htmlFor={`pending-body-${item.submissionId}`}>
+            Pending brief
+          </Label>
+          <Textarea
+            id={`pending-body-${item.submissionId}`}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <ProjectSelection
+            key={key}
+            api={api}
+            text={text}
+            onChange={setDraft}
+            onOpenSettings={onOpenSettings}
+          />
+          <Button
+            disabled={
+              busy ||
+              !draft ||
+              JSON.stringify(draft.text) !== JSON.stringify(text)
+            }
+            onClick={() => {
+              if (!draft) return;
+              setBusy(true);
+              api
+                .resolveSubmission(
+                  item.submissionId,
+                  item.revision,
+                  draft,
+                  crypto.randomUUID(),
+                )
+                .then(onResolved)
+                .catch((e) => {
+                  setError(String(e));
+                  setKey((n) => n + 1);
+                })
+                .finally(() => setBusy(false));
+            }}
+          >
+            Resolve pending draft
+          </Button>
+          {error && <p role="alert">{error}</p>}
+        </>
+      )}
+    </details>
+  );
+}

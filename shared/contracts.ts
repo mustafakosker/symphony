@@ -1,3 +1,4 @@
+import type { ProjectContext } from './projects.js';
 export type Status = 'triaging' | 'queued' | 'running' | 'waiting-for-human'
   | 'blocked' | 'done' | 'rejected' | 'cancelled';
 export type Role = 'triage' | 'researcher' | 'prd-writer' | 'implementer' | 'reviewer';
@@ -36,8 +37,8 @@ export type Run = {
   reconciliationNote?: string;
   processExitConfirmed?: boolean;
 };
-export type Task = {
-  schemaVersion: 1; id: string; revision: number; title: string; idea: string;
+export type TaskFields = {
+  id: string; revision: number; title: string; idea: string;
   type: string; projectId: string | null; source: string; status: Status;
   workflow: Workflow | null; proposedWorkflow: Workflow | null;
   currentStepId: string; completedStepIds: string[]; staleStepIds: string[];
@@ -46,6 +47,9 @@ export type Task = {
   approvalBindings: ApprovalBinding[];
   blockedReason: string | null; queuedAt: string | null; createdAt: string; updatedAt: string;
 };
+export type LegacyTask = TaskFields & { schemaVersion: 1 };
+export type ConnectedTask = TaskFields & { schemaVersion: 2; purpose: 'task' | 'project-brief'; projectContext: ProjectContext };
+export type Task = LegacyTask | ConnectedTask;
 export type AgentResult = {
   taskId: string; attemptId: string; summary: string; artifacts: ArtifactRef[];
 } & (

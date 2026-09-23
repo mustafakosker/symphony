@@ -10,6 +10,8 @@ import { TooltipProvider } from "./ui/tooltip";
 import "../styles/workspace.css";
 
 type Props = {
+  screen?: string;
+  onScreen?(screen: "projects" | "settings"): void;
   tasks: Task[];
   filter: Filter;
   task: Task | null;
@@ -44,17 +46,17 @@ function SearchShortcut({ onSearch }: { onSearch(): void }) {
   return null;
 }
 
-export default function WorkspaceShell({ tasks, filter, task, connected, coordinator, detail, onFilter, onSearch, onBack, children }: Props) {
+export default function WorkspaceShell({ screen,onScreen,tasks, filter, task, connected, coordinator, detail, onFilter, onSearch, onBack, children }: Props) {
   const [help, setHelp] = useState(false);
   return <TooltipProvider><SidebarProvider className="workspace-shell" open onOpenChange={keepDesktopNavigationOpen}>
     <SearchShortcut onSearch={onSearch} />
-    <WorkspaceSidebar tasks={tasks} filter={filter} connected={connected} coordinator={coordinator} onFilter={onFilter} onSearch={onSearch} />
+    <WorkspaceSidebar screen={screen} onScreen={onScreen} tasks={tasks} filter={filter} connected={connected} coordinator={coordinator} onFilter={onFilter} onSearch={onSearch} />
     <SidebarInset className="workspace-inset">
       <header className="workspace-location-bar">
         <SidebarTrigger aria-label="Open workspace menu" className="workspace-menu-trigger" />
         <span className="workspace-location-name">Personal workspace</span>
         <Separator orientation="vertical" className="workspace-location-separator" />
-        <span className="workspace-location-current">{detail ? task?.title ?? "Task unavailable" : viewNames[filter]}</span>
+        <span className="workspace-location-current">{screen === "projects" ? "Projects" : screen === "settings" ? "Settings" : detail ? task?.title ?? "Task unavailable" : viewNames[filter]}</span>
         <span className="workspace-location-spacer" />
         <Button variant="ghost" size="icon" aria-label="Search tasks" onClick={onSearch}><Search size={17} /></Button>
         <Button variant="ghost" size="icon" aria-label="About this workspace" onClick={() => setHelp(value => !value)}><CircleHelp size={17} /></Button>

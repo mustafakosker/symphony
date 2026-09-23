@@ -234,3 +234,32 @@
   .workspace-main .detail-title { font-size: 24px; }
   .workspace-back-bar { padding: 8px 12px 0; }
 }
+
+.project-page { max-width: 1280px; margin: 0 auto; padding: 36px; }
+.project-page h1 { font-size: 30px; font-weight: 600; letter-spacing: -.035em; margin: 8px 0; }
+.project-page h2 { font-size: 21px; font-weight: 550; margin-bottom: 12px; }
+.project-page h3 { font-weight: 600; margin-top: 24px; }
+.project-page p { margin: 10px 0 18px; line-height: 1.6; }
+.project-heading, .project-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.project-heading { justify-content: space-between; margin-bottom: 28px; }
+.project-actions { margin: 16px 0; }
+.project-panel { border: 1px solid var(--border); border-radius: 12px; padding: 24px; background: var(--card); min-width: 0; }
+.project-panel label { display: block; margin: 18px 0 8px; }
+.project-panel dd, .project-muted { color: var(--muted-foreground); font-size: 13px; overflow-wrap: anywhere; }
+.project-panel dt { margin-top: 18px; font-weight: 500; }
+.project-layout { display: grid; grid-template-columns: minmax(210px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.project-list { display: grid; gap: 10px; }
+.project-card { display: grid; gap: 6px; text-align: left; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); cursor: pointer; overflow-wrap: anywhere; }
+.project-card:hover, .project-card.selected { border-color: var(--foreground); }
+.project-card span, .project-card small { font-size: 12px; color: var(--muted-foreground); }
+.project-status { text-transform: capitalize; }
+.project-page select { width: 100%; border: 1px solid var(--border); padding: 9px 12px; border-radius: 7px; background: var(--background); }
+.project-operation { border-left: 2px solid var(--border); padding: 10px 14px; font-size: 13px; margin-top: 12px; }
+.project-report, .project-operation pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; max-height: 500px; overflow: auto; }
+@media (max-width: 760px) { .project-page { padding: 20px 16px; } .project-layout { grid-template-columns: 1fr; } .project-panel { padding: 18px; } }
+.project-selection { border-top: 1px solid var(--border); margin-top: 22px; padding-top: 14px; }
+.project-selection p { font-size: 12px; margin: 6px 0 12px; }
+.project-selection-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin: 8px 0; }
+.project-selection-row label { font-size: 11px; display: grid; gap: 5px; }
+.project-selection select { background: var(--background); border: 1px solid var(--border); border-radius: 5px; padding: 5px; font-size: 12px; }
+.draft-dialog { max-height: 90dvh; overflow-y: auto; }
